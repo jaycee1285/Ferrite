@@ -417,6 +417,8 @@ pub enum ShortcutCommand {
     ToggleOutline,
     ToggleFileTree,
     TogglePipeline,
+    ToggleTerminal,
+    ToggleProductivityHub,
     // Edit
     Undo,
     Redo,
@@ -468,7 +470,7 @@ impl ShortcutCommand {
             // Navigation
             NextTab, PrevTab, GoToLine, QuickOpen,
             // View
-            ToggleViewMode, CycleTheme, ToggleZenMode, ToggleOutline, ToggleFileTree, TogglePipeline,
+            ToggleViewMode, CycleTheme, ToggleZenMode, ToggleOutline, ToggleFileTree, TogglePipeline, ToggleTerminal, ToggleProductivityHub,
             // Edit
             Undo, Redo, DeleteLine, DuplicateLine, MoveLineUp, MoveLineDown, SelectNextOccurrence,
             // Search
@@ -507,6 +509,8 @@ impl ShortcutCommand {
             ShortcutCommand::ToggleOutline => "Toggle Outline",
             ShortcutCommand::ToggleFileTree => "Toggle File Tree",
             ShortcutCommand::TogglePipeline => "Toggle Pipeline",
+            ShortcutCommand::ToggleTerminal => "Toggle Terminal",
+            ShortcutCommand::ToggleProductivityHub => "Toggle Productivity Hub",
             // Edit
             ShortcutCommand::Undo => "Undo",
             ShortcutCommand::Redo => "Redo",
@@ -559,8 +563,9 @@ impl ShortcutCommand {
             | ShortcutCommand::QuickOpen => "Navigation",
 
             ShortcutCommand::ToggleViewMode | ShortcutCommand::CycleTheme | ShortcutCommand::ToggleZenMode
-            | ShortcutCommand::ToggleFullscreen | ShortcutCommand::ToggleOutline | ShortcutCommand::ToggleFileTree 
-            | ShortcutCommand::TogglePipeline => "View",
+            | ShortcutCommand::ToggleFullscreen | ShortcutCommand::ToggleOutline | ShortcutCommand::ToggleFileTree
+            | ShortcutCommand::TogglePipeline | ShortcutCommand::ToggleTerminal
+            | ShortcutCommand::ToggleProductivityHub => "View",
 
             ShortcutCommand::Undo | ShortcutCommand::Redo | ShortcutCommand::DeleteLine
             | ShortcutCommand::DuplicateLine | ShortcutCommand::MoveLineUp | ShortcutCommand::MoveLineDown
@@ -607,6 +612,8 @@ impl ShortcutCommand {
             ShortcutCommand::ToggleOutline => KeyBinding::new(M::ctrl_shift(), O),
             ShortcutCommand::ToggleFileTree => KeyBinding::new(M::ctrl_shift(), E),
             ShortcutCommand::TogglePipeline => KeyBinding::new(M::ctrl_shift(), L),
+            ShortcutCommand::ToggleTerminal => KeyBinding::new(M::ctrl(), Backtick),
+            ShortcutCommand::ToggleProductivityHub => KeyBinding::new(M::ctrl_shift(), H),
             // Edit
             ShortcutCommand::Undo => KeyBinding::new(M::ctrl(), Z),
             ShortcutCommand::Redo => KeyBinding::new(M::ctrl(), Y),
@@ -624,7 +631,7 @@ impl ShortcutCommand {
             // Formatting
             ShortcutCommand::FormatBold => KeyBinding::new(M::ctrl(), B),
             ShortcutCommand::FormatItalic => KeyBinding::new(M::ctrl(), I),
-            ShortcutCommand::FormatInlineCode => KeyBinding::new(M::ctrl(), Backtick),
+            ShortcutCommand::FormatInlineCode => KeyBinding::new(M::ctrl_shift(), Backtick),
             ShortcutCommand::FormatCodeBlock => KeyBinding::new(M::ctrl_shift(), C),
             ShortcutCommand::FormatLink => KeyBinding::new(M::ctrl(), K),
             ShortcutCommand::FormatImage => KeyBinding::new(M::ctrl_shift(), K),
@@ -644,7 +651,7 @@ impl ShortcutCommand {
             // Other
             ShortcutCommand::OpenSettings => KeyBinding::new(M::ctrl(), Comma),
             ShortcutCommand::OpenAbout => KeyBinding::new(M::none(), F1),
-            ShortcutCommand::ExportHtml => KeyBinding::new(M::ctrl_shift(), E),
+            ShortcutCommand::ExportHtml => KeyBinding::new(M::ctrl_shift(), X),
             ShortcutCommand::InsertToc => KeyBinding::new(M::ctrl_shift(), U),
         }
     }
@@ -747,6 +754,12 @@ pub enum Language {
     /// Simplified Chinese (简体中文)
     #[serde(rename = "zh-Hans")]
     ChineseSimplified,
+    /// German (Deutsch)
+    #[serde(rename = "de")]
+    German,
+    /// Japanese (日本語)
+    #[serde(rename = "ja")]
+    Japanese,
 }
 
 impl Language {
@@ -755,6 +768,8 @@ impl Language {
         match self {
             Language::English => "en",
             Language::ChineseSimplified => "zh_Hans",
+            Language::German => "de",
+            Language::Japanese => "ja",
         }
     }
 
@@ -763,6 +778,32 @@ impl Language {
         match self {
             Language::English => "English",
             Language::ChineseSimplified => "简体中文",
+            Language::German => "Deutsch",
+            Language::Japanese => "日本語",
+        }
+    }
+
+    /// Latin-only name for use in the language selector dropdown.
+    /// Avoids loading CJK fonts just to render the selector; always legible.
+    pub fn selector_display_name(&self) -> &'static str {
+        match self {
+            Language::English => "English",
+            Language::ChineseSimplified => "Chinese (Simplified)",
+            Language::German => "German",
+            Language::Japanese => "Japanese",
+        }
+    }
+
+    /// Returns the CJK font needed for this language's UI, if any.
+    ///
+    /// When the user switches to a CJK language, the UI labels (from i18n)
+    /// contain CJK characters that require the corresponding font to be loaded.
+    /// Returns `None` for non-CJK languages (English, German, etc.).
+    pub fn required_cjk_font(&self) -> Option<CjkFontPreference> {
+        match self {
+            Language::ChineseSimplified => Some(CjkFontPreference::SimplifiedChinese),
+            Language::Japanese => Some(CjkFontPreference::Japanese),
+            _ => None,
         }
     }
 
@@ -771,6 +812,8 @@ impl Language {
         &[
             Language::English,
             Language::ChineseSimplified,
+            Language::German,
+            Language::Japanese,
         ]
     }
 
@@ -802,6 +845,8 @@ impl Language {
         match primary_lang {
             "en" => Some(Language::English),
             "zh" => Some(Language::ChineseSimplified),
+            "de" => Some(Language::German),
+            "ja" => Some(Language::Japanese),
             _ => None,
         }
     }
@@ -1186,7 +1231,7 @@ pub enum CjkFontPreference {
 }
 
 impl CjkFontPreference {
-    /// Get the display name for the preference.
+    /// Get the display name for the preference (may include native script).
     pub fn display_name(&self) -> &'static str {
         match self {
             CjkFontPreference::Auto => "Auto (System Locale)",
@@ -1194,6 +1239,18 @@ impl CjkFontPreference {
             CjkFontPreference::SimplifiedChinese => "Simplified Chinese (简体中文)",
             CjkFontPreference::TraditionalChinese => "Traditional Chinese (繁體中文)",
             CjkFontPreference::Japanese => "Japanese (日本語)",
+        }
+    }
+
+    /// Latin-only name for use in the CJK preference dropdown.
+    /// Avoids loading CJK fonts just to render the selector; always legible.
+    pub fn selector_display_name(&self) -> &'static str {
+        match self {
+            CjkFontPreference::Auto => "Auto (System Locale)",
+            CjkFontPreference::Korean => "Korean (Hangul)",
+            CjkFontPreference::SimplifiedChinese => "Simplified Chinese",
+            CjkFontPreference::TraditionalChinese => "Traditional Chinese",
+            CjkFontPreference::Japanese => "Japanese",
         }
     }
 
@@ -1280,7 +1337,7 @@ impl ViewMode {
         match self {
             ViewMode::Raw => "📝",
             ViewMode::Rendered => "👁",
-            ViewMode::Split => "⫿",
+            ViewMode::Split => "▌▐", // Left + right half blocks (split panes); widely supported
         }
     }
 
@@ -1489,6 +1546,11 @@ impl Default for TabInfo {
 // Main Settings Struct
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Helper function for serde default that returns true
+fn default_true() -> bool {
+    true
+}
+
 /// User preferences and application settings.
 ///
 /// This struct is serialized to JSON and persisted to the user's config directory.
@@ -1577,6 +1639,13 @@ pub struct Settings {
     // ─────────────────────────────────────────────────────────────────────────
     /// Syntax highlighting theme name
     pub syntax_theme: String,
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Format Toolbar
+    // ─────────────────────────────────────────────────────────────────────────
+    /// Whether the format toolbar at the bottom of the raw editor is visible
+    #[serde(default = "default_true")]
+    pub format_toolbar_visible: bool,
 
     // ─────────────────────────────────────────────────────────────────────────
     // Outline Panel
@@ -1766,12 +1835,102 @@ pub struct Settings {
     pub snippets_enabled: bool,
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Vim Mode Settings
+    // ─────────────────────────────────────────────────────────────────────────
+    /// Whether Vim keybinding mode is enabled.
+    /// When enabled, the editor uses modal editing (Normal/Insert/Visual modes)
+    /// with Vim-style keybindings (hjkl, dd, yy, p, i, Esc, v/V, /search).
+    /// Default editing behavior is preserved when disabled.
+    #[serde(default)]
+    pub vim_mode: bool,
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Keyboard Shortcuts Settings
     // ─────────────────────────────────────────────────────────────────────────
     /// Custom keyboard shortcuts configuration.
     /// Only stores non-default bindings; defaults are used for unset commands.
     /// Reference: GitHub Issue #25
     pub keyboard_shortcuts: KeyboardShortcuts,
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Terminal Settings
+    // ─────────────────────────────────────────────────────────────────────────
+    /// Whether the integrated terminal feature is enabled
+    pub terminal_enabled: bool,
+
+    /// Default height of the terminal panel in pixels
+    pub terminal_panel_height: f32,
+
+    /// Terminal font size in pixels
+    pub terminal_font_size: f32,
+
+    /// Maximum scrollback lines for the terminal
+    pub terminal_scrollback_lines: usize,
+
+    /// Whether to automatically copy text to clipboard on selection
+    pub terminal_copy_on_select: bool,
+
+    /// Name of the terminal color theme
+    pub terminal_theme_name: String,
+
+    /// Terminal background opacity (0.0 to 1.0)
+    pub terminal_opacity: f32,
+
+    /// Command to run automatically when a new terminal is created
+    pub terminal_startup_command: String,
+
+    /// Custom regex patterns for prompt detection
+    pub terminal_prompt_patterns: Vec<String>,
+
+    /// Color for the breathing animation when waiting for input
+    pub terminal_breathing_color: egui::Color32,
+
+    /// Whether to automatically load terminal layout from project root
+    pub terminal_auto_load_layout: bool,
+
+    /// Whether to automatically save terminal layout to project root on close/switch
+    #[serde(default = "default_true")]
+    pub terminal_auto_save_layout: bool,
+
+    /// Saved terminal macros
+    pub terminal_macros: std::collections::HashMap<String, String>,
+
+    /// Whether to play a sound when terminal prompt is detected (waiting for input)
+    #[serde(default)]
+    pub terminal_sound_enabled: bool,
+
+    /// Optional custom sound file path (None = system beep)
+    #[serde(default)]
+    pub terminal_sound_file: Option<String>,
+
+    /// Whether to automatically focus a terminal when it starts waiting for input
+    /// (transitions from running to prompt). Only triggers once per run cycle.
+    #[serde(default)]
+    pub terminal_focus_on_detect: bool,
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Panel Visibility (Future Features)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Whether the AI assistant panel is visible
+    #[serde(default)]
+    pub ai_panel_visible: bool,
+
+    /// Whether the database tools panel is visible
+    #[serde(default)]
+    pub database_panel_visible: bool,
+
+    /// Whether the SSH sessions panel is visible
+    #[serde(default)]
+    pub ssh_panel_visible: bool,
+
+    /// Whether the productivity hub (tasks/pomodoro/notes) panel is visible
+    #[serde(default)]
+    pub productivity_panel_visible: bool,
+
+    /// Whether the productivity hub is docked in the outline panel (true) or floating (false)
+    #[serde(default = "default_true")]
+    pub productivity_panel_docked: bool,
 }
 
 impl Default for Settings {
@@ -1805,6 +1964,9 @@ impl Default for Settings {
 
             // Syntax Highlighting
             syntax_theme: String::from("base16-ocean.dark"),
+
+            // Format Toolbar
+            format_toolbar_visible: true, // Shown by default
 
             // Outline Panel
             outline_enabled: false, // Hidden by default
@@ -1876,8 +2038,42 @@ impl Default for Settings {
             // Snippets Settings
             snippets_enabled: true, // Snippet expansion enabled by default
 
+            // Vim Mode Settings
+            vim_mode: false, // Disabled by default (standard editing preserved)
+
             // Keyboard Shortcuts Settings
             keyboard_shortcuts: KeyboardShortcuts::default(),
+
+            // Terminal Settings
+            terminal_enabled: true,           // Terminal feature enabled by default
+            terminal_panel_height: 300.0,     // Default panel height
+            terminal_font_size: 14.0,         // Default terminal font size
+            terminal_scrollback_lines: 10000, // Default scrollback buffer size
+            terminal_copy_on_select: false,   // Manual copy by default
+            terminal_theme_name: String::from("Ferrite Dark"), // Default theme
+            terminal_opacity: 1.0, // Opaque by default
+            terminal_startup_command: String::new(),
+            terminal_prompt_patterns: vec![
+                r"^>\s*$".to_string(),
+                r"^\$\s*$".to_string(),
+                r"^#\s*$".to_string(),
+                r"^>>>\s*$".to_string(),
+                r"PS.*>\s*$".to_string(),
+            ],
+            terminal_breathing_color: egui::Color32::from_rgb(100, 149, 237),
+            terminal_auto_load_layout: true,
+            terminal_auto_save_layout: true,
+            terminal_macros: std::collections::HashMap::new(),
+            terminal_sound_enabled: false, // Sound notification disabled by default
+            terminal_sound_file: None,     // Use system beep by default
+            terminal_focus_on_detect: false, // Auto-focus on prompt disabled by default
+
+            // Panel Visibility
+            ai_panel_visible: false,
+            database_panel_visible: false,
+            ssh_panel_visible: false,
+            productivity_panel_visible: false,
+            productivity_panel_docked: true,
         }
     }
 }
@@ -2405,7 +2601,7 @@ mod tests {
         assert_eq!(ViewMode::Split.label(), "Split");
         assert_eq!(ViewMode::Raw.icon(), "📝");
         assert_eq!(ViewMode::Rendered.icon(), "👁");
-        assert_eq!(ViewMode::Split.icon(), "⫿");
+        assert_eq!(ViewMode::Split.icon(), "▌▐");
     }
 
     #[test]
@@ -3037,8 +3233,6 @@ mod tests {
         // Currently unsupported locales
         assert_eq!(Language::from_locale_code("ko"), None);
         assert_eq!(Language::from_locale_code("fr"), None);
-        assert_eq!(Language::from_locale_code("ja"), None);
-        assert_eq!(Language::from_locale_code("de"), None);
     }
 
     #[test]
@@ -3047,6 +3241,15 @@ mod tests {
         assert_eq!(Language::from_locale_code("zh-CN"), Some(Language::ChineseSimplified));
         assert_eq!(Language::from_locale_code("zh_Hans"), Some(Language::ChineseSimplified));
         assert_eq!(Language::from_locale_code("zh"), Some(Language::ChineseSimplified));
+
+        // German
+        assert_eq!(Language::from_locale_code("de"), Some(Language::German));
+        assert_eq!(Language::from_locale_code("de-DE"), Some(Language::German));
+        assert_eq!(Language::from_locale_code("de_AT"), Some(Language::German));
+
+        // Japanese
+        assert_eq!(Language::from_locale_code("ja"), Some(Language::Japanese));
+        assert_eq!(Language::from_locale_code("ja-JP"), Some(Language::Japanese));
     }
 
     #[test]
@@ -3445,20 +3648,59 @@ mod tests {
     #[test]
     fn test_commands_by_category() {
         let categories = KeyboardShortcuts::commands_by_category();
-        
+
         // Should have multiple categories
         assert!(!categories.is_empty());
-        
+
         // Each category should have at least one command
         for (name, commands) in &categories {
             assert!(!name.is_empty());
             assert!(!commands.is_empty());
         }
-        
+
         // Find "File" category
         let file_cat = categories.iter().find(|(name, _)| *name == "File");
         assert!(file_cat.is_some());
         let (_, file_commands) = file_cat.unwrap();
         assert!(file_commands.contains(&ShortcutCommand::Save));
+    }
+
+    #[test]
+    fn test_panel_visibility_defaults() {
+        let settings = Settings::default();
+        assert_eq!(settings.ai_panel_visible, false);
+        assert_eq!(settings.database_panel_visible, false);
+        assert_eq!(settings.ssh_panel_visible, false);
+        assert_eq!(settings.productivity_panel_visible, false);
+        assert_eq!(settings.productivity_panel_docked, true);
+    }
+
+    #[test]
+    fn test_settings_migration_old_config() {
+        // Simulate old config without panel visibility fields
+        let old_config = r#"{
+            "theme": "dark",
+            "font_size": 14.0
+        }"#;
+
+        let settings: Settings = serde_json::from_str(old_config).unwrap();
+        // New fields should default to false
+        assert_eq!(settings.ai_panel_visible, false);
+    }
+
+    #[test]
+    fn test_settings_roundtrip() {
+        let mut settings = Settings::default();
+        settings.ai_panel_visible = true;
+        settings.database_panel_visible = true;
+
+        // Serialize
+        let json = serde_json::to_string(&settings).unwrap();
+
+        // Deserialize
+        let loaded: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(loaded.ai_panel_visible, true);
+        assert_eq!(loaded.database_panel_visible, true);
+        assert_eq!(loaded.ssh_panel_visible, false);
     }
 }
