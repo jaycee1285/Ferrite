@@ -21,7 +21,7 @@
 
 use eframe::egui::{self, Color32, RichText, ScrollArea, TextEdit, Ui, Vec2};
 use log::warn;
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::collections::HashMap;
 
 use crate::string_utils::safe_slice_to;

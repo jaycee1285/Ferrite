@@ -39,7 +39,6 @@
 //! ```
 
 mod ast_ops;
-pub mod csv_viewer;
 mod editor;
 pub mod formatting;
 pub mod mermaid;
@@ -50,10 +49,6 @@ pub mod tree_viewer;
 mod widgets;
 
 // Only export what's actually used by the app
-pub use csv_viewer::{
-    delimiter_display_name, delimiter_symbol, get_tabular_file_type, CsvViewer,
-    CsvViewerState, DELIMITERS,
-};
 pub use editor::{cleanup_rendered_editor_memory, EditorMode, LineMapping, MarkdownEditor, WikilinkContext};
 pub use formatting::{
     apply_raw_format, detect_raw_formatting_state, FormattingState, MarkdownFormatCommand,

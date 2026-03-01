@@ -14,7 +14,7 @@
 #![allow(clippy::collapsible_else_if)]
 
 use eframe::egui::{self, Color32, Key, RichText};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::path::PathBuf;
 
 /// State for an active file operation dialog.

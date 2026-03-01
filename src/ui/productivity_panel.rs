@@ -6,7 +6,7 @@
 //! - AutoSave helper for debounced writes
 //! - Workspace-scoped persistence functions
 
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -746,9 +746,6 @@ impl ProductivityPanel {
 
                 // Check completion
                 if self.timer.is_complete() {
-                    // Play notification sound using the re-exported function
-                    crate::terminal::play_notification(None);
-
                     // Auto-transition
                     if self.timer.is_work() {
                         self.timer.increment_cycle();

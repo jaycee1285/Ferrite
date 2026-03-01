@@ -17,7 +17,7 @@
 use crate::config::Theme;
 use crate::markdown::parser::{CalloutType, HeadingLevel, ListType, MarkdownNode, MarkdownNodeType};
 use eframe::egui::{self, Color32, FontId, Key, RichText, TextEdit, Ui};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Widget Output

@@ -50,6 +50,7 @@ pub mod manager;
 
 pub use manager::ThemeManager;
 
+use std::collections::HashMap;
 use eframe::egui::Color32;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,11 +138,104 @@ impl ThemeColors {
     /// ctx.set_visuals(visuals);
     /// ```
     pub fn to_visuals(&self) -> eframe::egui::Visuals {
-        if self.is_dark() {
-            dark::create_dark_visuals()
+        use eframe::egui::{self, Rounding, Stroke, Visuals};
+
+        let spacing = ThemeSpacing::default();
+        let mut visuals = if self.is_dark() {
+            Visuals::dark()
         } else {
-            light::create_light_visuals()
-        }
+            Visuals::light()
+        };
+
+        visuals.panel_fill = self.base.background;
+        visuals.window_fill = self.base.background;
+        visuals.extreme_bg_color = self.base.background_tertiary;
+        visuals.faint_bg_color = self.base.background_secondary;
+        visuals.code_bg_color = self.editor.code_block_bg;
+
+        visuals.override_text_color = Some(self.text.primary);
+        visuals.warn_fg_color = self.ui.warning;
+        visuals.error_fg_color = self.ui.error;
+        visuals.hyperlink_color = self.text.link;
+
+        visuals.selection.bg_fill = self.base.selected;
+        visuals.selection.stroke = Stroke::new(1.0, self.ui.accent);
+
+        visuals.widgets.noninteractive.bg_fill = self.base.background_secondary;
+        visuals.widgets.noninteractive.weak_bg_fill = self.base.background_tertiary;
+        visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, self.base.border_subtle);
+        visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, self.text.primary);
+        visuals.widgets.noninteractive.rounding = Rounding::same(spacing.sm);
+
+        visuals.widgets.inactive.bg_fill = self.base.background_secondary;
+        visuals.widgets.inactive.weak_bg_fill = self.base.background_tertiary;
+        visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, self.base.border);
+        visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, self.text.secondary);
+        visuals.widgets.inactive.rounding = Rounding::same(spacing.sm);
+
+        visuals.widgets.hovered.bg_fill = self.base.hover;
+        visuals.widgets.hovered.weak_bg_fill = self.base.hover;
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, self.ui.accent);
+        visuals.widgets.hovered.fg_stroke = Stroke::new(1.5, self.text.primary);
+        visuals.widgets.hovered.rounding = Rounding::same(spacing.sm);
+
+        visuals.widgets.active.bg_fill = self.ui.accent;
+        visuals.widgets.active.weak_bg_fill = self.base.selected;
+        visuals.widgets.active.bg_stroke = Stroke::new(1.0, self.ui.accent_hover);
+        visuals.widgets.active.fg_stroke = Stroke::new(2.0, self.text.primary);
+        visuals.widgets.active.rounding = Rounding::same(spacing.sm);
+
+        visuals.widgets.open.bg_fill = self.base.selected;
+        visuals.widgets.open.weak_bg_fill = self.base.selected;
+        visuals.widgets.open.bg_stroke = Stroke::new(1.0, self.ui.accent);
+        visuals.widgets.open.fg_stroke = Stroke::new(1.0, self.text.primary);
+        visuals.widgets.open.rounding = Rounding::same(spacing.sm);
+
+        visuals.window_rounding = Rounding::same(spacing.md);
+        visuals.window_shadow = if self.is_dark() {
+            egui::epaint::Shadow {
+                offset: egui::vec2(0.0, 4.0),
+                blur: 16.0,
+                spread: 0.0,
+                color: Color32::from_black_alpha(80),
+            }
+        } else {
+            egui::epaint::Shadow {
+                offset: egui::vec2(0.0, 2.0),
+                blur: 8.0,
+                spread: 0.0,
+                color: Color32::from_black_alpha(25),
+            }
+        };
+        visuals.window_stroke = Stroke::new(1.0, self.base.border);
+        visuals.popup_shadow = if self.is_dark() {
+            egui::epaint::Shadow {
+                offset: egui::vec2(0.0, 6.0),
+                blur: 20.0,
+                spread: 0.0,
+                color: Color32::from_black_alpha(100),
+            }
+        } else {
+            egui::epaint::Shadow {
+                offset: egui::vec2(0.0, 4.0),
+                blur: 12.0,
+                spread: 0.0,
+                color: Color32::from_black_alpha(30),
+            }
+        };
+        visuals.menu_rounding = Rounding::same(spacing.sm);
+
+        visuals.resize_corner_size = 12.0;
+        visuals.clip_rect_margin = 3.0;
+        visuals.button_frame = true;
+        visuals.collapsing_header_frame = false;
+        visuals.indent_has_left_vline = true;
+        visuals.striped = true;
+        visuals.slider_trailing_fill = true;
+        visuals.interact_cursor = Some(eframe::egui::CursorIcon::PointingHand);
+        visuals.dark_mode = self.is_dark();
+
+        visuals
     }
 
     /// Create visuals for the given theme variant.
@@ -153,6 +247,204 @@ impl ThemeColors {
     ) -> eframe::egui::Visuals {
         Self::from_theme(theme, system_visuals).to_visuals()
     }
+
+    pub fn from_gtk_css() -> Option<Self> {
+        let palette = GtkCssPalette::load()?;
+        Some(palette.to_theme_colors())
+    }
+}
+
+#[derive(Debug, Clone)]
+struct GtkCssPalette {
+    colors: HashMap<String, Color32>,
+}
+
+impl GtkCssPalette {
+    fn load() -> Option<Self> {
+        let home = dirs::home_dir()?;
+        let candidate_paths = [
+            home.join(".config/gtk-4.0/gtk.css"),
+            home.join(".config/gtk-4.0/gtk-4.0.css"),
+        ];
+
+        for path in candidate_paths {
+            let Ok(content) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            if let Some(colors) = parse_gtk_define_colors(&content) {
+                return Some(Self { colors });
+            }
+        }
+
+        None
+    }
+
+    fn color(&self, name: &str) -> Option<Color32> {
+        self.colors.get(name).copied()
+    }
+
+    fn to_theme_colors(&self) -> ThemeColors {
+        let background = self
+            .color("window_bg_color")
+            .or_else(|| self.color("view_bg_color"))
+            .unwrap_or_else(|| Color32::from_rgb(30, 30, 30));
+        let secondary = self
+            .color("headerbar_bg_color")
+            .or_else(|| self.color("sidebar_bg_color"))
+            .unwrap_or(background);
+        let tertiary = self
+            .color("card_bg_color")
+            .or_else(|| self.color("popover_bg_color"))
+            .unwrap_or(secondary);
+        let foreground = self
+            .color("window_fg_color")
+            .or_else(|| self.color("view_fg_color"))
+            .unwrap_or_else(|| Color32::from_rgb(220, 220, 220));
+        let accent = self
+            .color("accent_color")
+            .or_else(|| self.color("accent_bg_color"))
+            .unwrap_or_else(|| Color32::from_rgb(100, 180, 255));
+        let border = self
+            .color("scrollbar_outline_color")
+            .or_else(|| self.color("headerbar_border_color"))
+            .unwrap_or(mix(background, foreground, 0.18));
+        let selected = self
+            .color("accent_bg_color")
+            .map(|c| mix(c, background, 0.25))
+            .unwrap_or_else(|| mix(accent, background, 0.25));
+        let muted = mix(foreground, background, 0.55);
+        let is_dark = perceived_luminance(background) < 0.5;
+
+        ThemeColors {
+            base: BaseColors {
+                background,
+                background_secondary: secondary,
+                background_tertiary: tertiary,
+                border,
+                border_subtle: mix(border, background, 0.4),
+                hover: mix(secondary, accent, if is_dark { 0.18 } else { 0.08 }),
+                selected,
+            },
+            text: TextColors {
+                primary: foreground,
+                secondary: mix(foreground, background, 0.72),
+                muted,
+                disabled: mix(foreground, background, 0.45),
+                link: self.color("link_color").unwrap_or(accent),
+                code: mix(foreground, accent, if is_dark { 0.15 } else { 0.08 }),
+            },
+            editor: EditorThemeColors {
+                heading: accent,
+                blockquote_border: border,
+                blockquote_text: mix(foreground, background, 0.75),
+                code_block_bg: tertiary,
+                code_block_border: mix(border, tertiary, 0.7),
+                horizontal_rule: border,
+                list_marker: mix(foreground, background, 0.75),
+                checkbox: accent,
+                table_border: border,
+                table_header_bg: secondary,
+            },
+            syntax: if is_dark { SyntaxColors::dark() } else { SyntaxColors::light() },
+            ui: UiColors {
+                accent,
+                accent_hover: mix(accent, foreground, if is_dark { 0.18 } else { 0.12 }),
+                success: self.color("success_color").unwrap_or(Color32::from_rgb(75, 210, 100)),
+                warning: self.color("warning_color").unwrap_or(Color32::from_rgb(255, 210, 50)),
+                error: self.color("error_color").unwrap_or(Color32::from_rgb(255, 100, 100)),
+                info: self.color("blue_3").unwrap_or(accent),
+                matching_bracket_bg: mix(accent, background, if is_dark { 0.35 } else { 0.2 })
+                    .gamma_multiply(if is_dark { 0.45 } else { 0.55 }),
+                matching_bracket_border: accent,
+            },
+        }
+    }
+}
+
+fn parse_gtk_define_colors(content: &str) -> Option<HashMap<String, Color32>> {
+    let mut colors = HashMap::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("@define-color ") {
+            continue;
+        }
+
+        let rest = trimmed.trim_start_matches("@define-color ").trim();
+        let Some((name, value)) = rest.split_once(' ') else {
+            continue;
+        };
+        let value = value.trim_end_matches(';').trim();
+        if let Some(color) = resolve_css_color(value, &colors) {
+            colors.insert(name.trim().to_string(), color);
+        }
+    }
+
+    if colors.is_empty() { None } else { Some(colors) }
+}
+
+fn resolve_css_color(value: &str, known: &HashMap<String, Color32>) -> Option<Color32> {
+    if let Some(name) = value.strip_prefix('@') {
+        return known.get(name).copied();
+    }
+    if let Some(hex) = value.strip_prefix('#') {
+        return parse_hex_color(hex);
+    }
+    if value.starts_with("rgba(") && value.ends_with(')') {
+        let inner = &value[5..value.len() - 1];
+        let parts: Vec<_> = inner.split(',').map(|part| part.trim()).collect();
+        if parts.len() != 4 {
+            return None;
+        }
+        let r: u8 = parts[0].parse().ok()?;
+        let g: u8 = parts[1].parse().ok()?;
+        let b: u8 = parts[2].parse().ok()?;
+        let a = parse_alpha(parts[3])?;
+        return Some(Color32::from_rgba_unmultiplied(r, g, b, a));
+    }
+    None
+}
+
+fn parse_hex_color(hex: &str) -> Option<Color32> {
+    match hex.len() {
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            Some(Color32::from_rgb(r, g, b))
+        }
+        8 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
+            Some(Color32::from_rgba_unmultiplied(r, g, b, a))
+        }
+        _ => None,
+    }
+}
+
+fn parse_alpha(value: &str) -> Option<u8> {
+    if let Ok(int) = value.parse::<u8>() {
+        return Some(int);
+    }
+    let float = value.parse::<f32>().ok()?.clamp(0.0, 1.0);
+    Some((float * 255.0).round() as u8)
+}
+
+fn mix(a: Color32, b: Color32, amount: f32) -> Color32 {
+    let amount = amount.clamp(0.0, 1.0);
+    let inv = 1.0 - amount;
+    Color32::from_rgba_unmultiplied(
+        ((a.r() as f32 * inv) + (b.r() as f32 * amount)).round() as u8,
+        ((a.g() as f32 * inv) + (b.g() as f32 * amount)).round() as u8,
+        ((a.b() as f32 * inv) + (b.b() as f32 * amount)).round() as u8,
+        ((a.a() as f32 * inv) + (b.a() as f32 * amount)).round() as u8,
+    )
+}
+
+fn perceived_luminance(color: Color32) -> f32 {
+    (0.2126 * color.r() as f32 + 0.7152 * color.g() as f32 + 0.0722 * color.b() as f32) / 255.0
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

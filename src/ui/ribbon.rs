@@ -11,7 +11,7 @@ use crate::markdown::formatting::{FormattingState, MarkdownFormatCommand};
 use crate::state::FileType;
 use crate::theme::ThemeColors;
 use eframe::egui::{self, Color32, Response, RichText, Ui, Vec2};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 /// Height of the ribbon in expanded state.
 const RIBBON_HEIGHT_EXPANDED: f32 = 40.0;
@@ -21,6 +21,8 @@ const RIBBON_HEIGHT_COLLAPSED: f32 = 28.0;
 
 /// Size of icon buttons.
 const ICON_BUTTON_SIZE: Vec2 = Vec2::new(32.0, 28.0);
+const RIBBON_LABEL_TEXT_SIZE: f32 = 12.0;
+const RIBBON_COMBO_TEXT_SIZE: f32 = 14.0;
 
 /// Actions that can be triggered from the ribbon.
 ///
@@ -106,10 +108,6 @@ pub enum RibbonAction {
     // Ribbon control
     /// Toggle ribbon collapsed state
     ToggleCollapse,
-
-    // Terminal
-    /// Toggle terminal panel visibility
-    ToggleTerminal,
 
     // Productivity
     /// Toggle productivity hub visibility
@@ -201,20 +199,8 @@ impl Ribbon {
     ) -> Option<RibbonAction> {
         let mut action: Option<RibbonAction> = None;
         let is_dark = theme_colors.is_dark();
-
-        // Colors for the ribbon
-        let ribbon_bg = if is_dark {
-            Color32::from_rgb(40, 40, 40)
-        } else {
-            Color32::from_rgb(248, 248, 248)
-        };
-
-        // Separator color for ribbon dividers
-        let separator_color = if is_dark {
-            Color32::from_rgb(70, 70, 70)
-        } else {
-            Color32::from_rgb(165, 165, 165)
-        };
+        let ribbon_bg = theme_colors.base.background_secondary;
+        let separator_color = theme_colors.base.border;
 
         // Set ribbon background
         ui.painter()
@@ -245,7 +231,7 @@ impl Ribbon {
             if !self.collapsed {
                 ui.label(
                     RichText::new(t!("menu.file.label").to_string())
-                        .size(10.0)
+                        .size(RIBBON_LABEL_TEXT_SIZE)
                         .color(theme_colors.text.muted),
                 );
             }
@@ -285,7 +271,7 @@ impl Ribbon {
             // Save Dropdown - replaces separate Save and SaveAs buttons
             // Note: ComboBox adds its own dropdown arrow, so we don't add ▾ manually
             egui::ComboBox::from_id_source("save_dropdown")
-                .selected_text(RichText::new("💾").size(14.0))
+                .selected_text(RichText::new("💾").size(RIBBON_COMBO_TEXT_SIZE))
                 .width(40.0)
                 .show_ui(ui, |ui| {
                     if ui
@@ -314,7 +300,7 @@ impl Ribbon {
             if !self.collapsed {
                 ui.label(
                     RichText::new(t!("menu.edit.label").to_string())
-                        .size(10.0)
+                        .size(RIBBON_LABEL_TEXT_SIZE)
                         .color(theme_colors.text.muted),
                 );
             }
@@ -340,7 +326,7 @@ impl Ribbon {
                 if !self.collapsed {
                     ui.label(
                         RichText::new(file_type.display_name())
-                            .size(10.0)
+                            .size(RIBBON_LABEL_TEXT_SIZE)
                             .color(theme_colors.text.muted),
                     );
                 }
@@ -390,7 +376,7 @@ impl Ribbon {
             if !self.collapsed {
                 ui.label(
                     RichText::new(t!("menu.tools.label").to_string())
-                        .size(10.0)
+                        .size(RIBBON_LABEL_TEXT_SIZE)
                         .color(theme_colors.text.muted),
                 );
             }
@@ -413,7 +399,7 @@ impl Ribbon {
                 // Note: ComboBox adds its own dropdown arrow, so we don't add ▾ manually
                 let export_label = if self.collapsed { "🌐".to_string() } else { t!("menu.file.export").to_string() };
                 egui::ComboBox::from_id_source("export_dropdown")
-                    .selected_text(RichText::new(export_label).size(12.0))
+                    .selected_text(RichText::new(export_label).size(RIBBON_COMBO_TEXT_SIZE))
                     .width(if self.collapsed { 40.0 } else { 65.0 })
                     .show_ui(ui, |ui| {
                         if ui
@@ -436,25 +422,6 @@ impl Ribbon {
                                 .on_hover_text(t!("ribbon.coming_soon").to_string());
                         });
                     });
-            }
-
-            ui.add_space(4.0);
-            vertical_separator(ui, separator_color, self.height() - 8.0);
-            ui.add_space(4.0);
-
-            // ═══════════════════════════════════════════════════════════════════
-            // Terminal Button
-            // ═══════════════════════════════════════════════════════════════════
-            if icon_button(
-                ui,
-                ">_",
-                &format!("Toggle Terminal ({}+`)", modifier_symbol()),
-                true,
-                is_dark,
-            )
-            .clicked()
-            {
-                action = Some(RibbonAction::ToggleTerminal);
             }
 
             // Note: Productivity Hub button removed - accessible via side panel toggle strip

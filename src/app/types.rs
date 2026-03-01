@@ -71,8 +71,6 @@ pub(crate) enum KeyboardAction {
     ToggleFoldAtCursor,
     /// Toggle Live Pipeline panel (Ctrl+Shift+L)
     TogglePipeline,
-    /// Toggle Terminal panel (Ctrl+`)
-    ToggleTerminal,
     /// Toggle Productivity Hub panel (Ctrl+Shift+H)
     ToggleProductivityHub,
     /// Open Go to Line dialog (Ctrl+G)

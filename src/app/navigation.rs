@@ -1,7 +1,7 @@
 //! Navigation and panel toggle handlers for the Ferrite application.
 //!
 //! This module contains tab switching, view mode cycling, panel toggles
-//! (outline, terminal, zen, pipeline), theme switching, undo/redo dispatch,
+//! (outline, zen, pipeline), theme switching, undo/redo dispatch,
 //! scroll interpolation, and heading navigation.
 
 use super::FerriteApp;
@@ -13,7 +13,7 @@ use crate::fonts;
 use crate::state::{BacklinkIndex, FileType, PendingAction};
 use eframe::egui;
 use log::{debug, info, warn};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::path::{Path, PathBuf};
 
 impl FerriteApp {
@@ -65,9 +65,15 @@ impl FerriteApp {
             .and_then(|t| t.path.as_ref())
             .map(|p| FileType::from_path(p))
             .unwrap_or(FileType::Unknown);
-        // Structured (JSON/YAML/TOML) files don't support Split mode
-        // CSV/TSV files DO support split mode (raw text + table view)
+        // Structured files skip Split; tabular files stay raw-only in this fork.
         let skip_split_mode = file_type.is_structured();
+
+        if file_type.is_tabular() {
+            if let Some(tab) = self.state.active_tab_mut() {
+                tab.view_mode = ViewMode::Raw;
+            }
+            return;
+        }
 
         // Track if we need to set App-level pending_scroll_to_line for Raw mode
         let mut raw_mode_scroll_to_line: Option<usize> = None;
@@ -86,7 +92,7 @@ impl FerriteApp {
             // Toggle the view mode
             let new_mode = tab.toggle_view_mode();
             
-            // For structured/tabular files, skip Split mode (not supported)
+            // For structured files, skip Split mode (not supported)
             let new_mode = if skip_split_mode && new_mode == ViewMode::Split {
                 tab.toggle_view_mode() // Toggle again to skip Split
             } else {
@@ -358,65 +364,14 @@ impl FerriteApp {
     // Panel toggle handlers
     /// Toggle the outline panel visibility.
     pub(crate) fn handle_toggle_outline(&mut self) {
-        self.state.settings.outline_enabled = !self.state.settings.outline_enabled;
+        self.state.settings.outline_enabled = false;
         self.state.mark_settings_dirty();
 
         let time = self.get_app_time();
-        if self.state.settings.outline_enabled {
-            self.state.show_toast(t!("notification.outline_shown").to_string(), time, 1.5);
-        } else {
-            self.state.show_toast(t!("notification.outline_hidden").to_string(), time, 1.5);
-        }
+        self.state
+            .show_toast("Outline panel disabled in this fork".to_string(), time, 1.5);
 
-        debug!(
-            "Outline panel toggled: {}",
-            self.state.settings.outline_enabled
-        );
-    }
-
-    /// Toggle the terminal panel visibility.
-    pub(crate) fn handle_toggle_terminal(&mut self) {
-        // Set working directory from workspace or current file's directory
-        let working_dir = self.state.workspace.as_ref()
-            .map(|w| w.root_path.clone())
-            .or_else(|| {
-                self.state.active_tab()
-                    .and_then(|t| t.path.as_ref())
-                    .and_then(|p| p.parent())
-                    .map(|p| p.to_path_buf())
-            });
-
-        // Check if working directory changed - reset layout state if so
-        if self.terminal_panel_state.working_dir != working_dir {
-            self.terminal_panel_state.reset_workspace_layout_state();
-        }
-        self.terminal_panel_state.working_dir = working_dir;
-
-        self.terminal_panel_state.toggle();
-
-        // Try to auto-load workspace layout when panel opens (if enabled and not yet loaded)
-        if self.terminal_panel_state.is_visible() && self.state.settings.terminal_auto_load_layout {
-            if self.terminal_panel_state.try_load_workspace_layout() {
-                let time = self.get_app_time();
-                self.state.show_toast(t!("notification.loaded_terminal_layout").to_string(), time, 2.0);
-            }
-        }
-
-        let time = self.get_app_time();
-        if self.terminal_panel_state.is_visible() {
-            self.state.show_toast(t!("notification.terminal_shown").to_string(), time, 1.5);
-        } else {
-            // Auto-save when hiding the panel (if enabled)
-            if self.state.settings.terminal_auto_save_layout {
-                self.terminal_panel_state.save_workspace_layout();
-            }
-            self.state.show_toast(t!("notification.terminal_hidden").to_string(), time, 1.5);
-        }
-
-        debug!(
-            "Terminal panel toggled: {}",
-            self.terminal_panel_state.is_visible()
-        );
+        debug!("Outline panel toggle ignored; feature disabled in this fork");
     }
 
     /// Ensure echo worker is spawned (lazy initialization).

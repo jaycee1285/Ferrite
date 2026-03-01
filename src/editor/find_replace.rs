@@ -13,7 +13,7 @@
 use eframe::egui::{self, Color32, Key, RichText, Ui, Vec2};
 use log::debug;
 use regex::Regex;
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Find State

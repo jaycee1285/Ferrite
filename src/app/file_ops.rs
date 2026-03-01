@@ -10,7 +10,7 @@ use crate::files::dialogs::{open_multiple_files_dialog, save_file_dialog};
 use crate::ui::{FileOperationDialog, FileTreeContextAction, SearchNavigationTarget};
 use eframe::egui;
 use log::{debug, info, trace, warn};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::path::{Path, PathBuf};
 
 impl FerriteApp {
@@ -245,36 +245,6 @@ impl FerriteApp {
                     self.state
                         .show_toast(t!("notification.opened_workspace", name = folder_name).to_string(), time, 2.5);
                     
-                    // Auto-load terminal layout if enabled
-                    if self.state.settings.terminal_auto_load_layout {
-                        let layout_path = folder_path.join("terminal_layout.json");
-                        if layout_path.exists() {
-                            if let Ok(json) = std::fs::read_to_string(layout_path) {
-                                if let Ok(workspace) = serde_json::from_str::<crate::terminal::SavedWorkspace>(&json) {
-                                    match self.terminal_panel_state.manager.load_workspace(workspace) {
-                                        Ok(fws) => {
-                                            self.terminal_panel_state.floating_windows.clear();
-                                            for (layout, title, pos, size) in fws {
-                                                let leaf = layout.first_leaf();
-                                                let id = egui::ViewportId::from_hash_of(egui::Id::new("floating_term").with(leaf));
-                                                self.terminal_panel_state.floating_windows.push(crate::ui::FloatingWindow {
-                                                    id,
-                                                    layout,
-                                                    title,
-                                                    pos: pos.map(|(x, y)| egui::pos2(x, y)),
-                                                    size: egui::vec2(size.0, size.1),
-                                                    first_frame: true,
-                                                });
-                                            }
-                                            info!("Auto-loaded terminal layout from workspace root");
-                                        }
-                                        Err(e) => warn!("Failed to auto-load terminal layout: {}", e),
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     // Immediately save session to persist the workspace path
                     self.force_session_save();
                 }
@@ -325,7 +295,6 @@ impl FerriteApp {
 
         let mut session_state = self.state.capture_session_state();
         session_state.clean_shutdown = false; // This is a crash recovery snapshot
-        self.inject_csv_delimiters(&mut session_state);
 
         if save_crash_recovery_state(&session_state) {
             self.session_save_throttle.record_save();
@@ -380,7 +349,8 @@ impl FerriteApp {
             if self.search_panel.is_open() {
                 if let Some(workspace) = &self.state.workspace {
                     let files = workspace.all_files();
-                    self.search_panel.search(&files, &workspace.hidden_patterns);
+                    self.search_panel
+                        .search(&workspace.root_path, &files, &workspace.hidden_patterns);
                 }
             }
         } else {
@@ -422,20 +392,22 @@ impl FerriteApp {
                     // Clear any existing transient highlight from previous navigations
                     tab.clear_transient_highlight();
 
-                    // Set the transient highlight for the matched text
-                    let highlight_end = target.char_offset + target.match_len;
-                    tab.set_transient_highlight(target.char_offset, highlight_end);
+                    if target.match_len > 0 {
+                        // Set the transient highlight for the matched text
+                        let highlight_end = target.char_offset + target.match_len;
+                        tab.set_transient_highlight(target.char_offset, highlight_end);
 
-                    // Set cursor position to the match location
-                    tab.set_cursor(target.char_offset);
+                        // Set cursor position to the match location
+                        tab.set_cursor(target.char_offset);
 
-                    // Schedule scroll to the target line (editor will handle this)
-                    self.pending_scroll_to_line = Some(target.line_number);
+                        // Schedule scroll to the target line (editor will handle this)
+                        self.pending_scroll_to_line = Some(target.line_number);
 
-                    debug!(
-                        "Set transient highlight at {}..{} and scroll to line {}",
-                        target.char_offset, highlight_end, target.line_number
-                    );
+                        debug!(
+                            "Set transient highlight at {}..{} and scroll to line {}",
+                            target.char_offset, highlight_end, target.line_number
+                        );
+                    }
                 }
 
                 // Add to workspace recent files
@@ -488,9 +460,6 @@ impl FerriteApp {
                 }
                 WorkspaceEvent::FileModified(path) => {
                     debug!("File modified: {}", path.display());
-
-                    // Notify terminal panel for watch mode
-                    self.terminal_panel_state.manager.on_file_changed(&path);
 
                     // Check if this file is open in a tab
                     for tab in self.state.tabs() {
@@ -927,36 +896,6 @@ impl FerriteApp {
                         .unwrap_or("folder");
                     self.state
                         .show_toast(t!("notification.opened_workspace", name = folder_name).to_string(), time, 2.5);
-
-                    // Auto-load terminal layout if enabled
-                    if self.state.settings.terminal_auto_load_layout {
-                        let layout_path = folder_path.join("terminal_layout.json");
-                        if layout_path.exists() {
-                            if let Ok(json) = std::fs::read_to_string(layout_path) {
-                                if let Ok(workspace) = serde_json::from_str::<crate::terminal::SavedWorkspace>(&json) {
-                                    match self.terminal_panel_state.manager.load_workspace(workspace) {
-                                        Ok(fws) => {
-                                            self.terminal_panel_state.floating_windows.clear();
-                                            for (layout, title, pos, size) in fws {
-                                                let leaf = layout.first_leaf();
-                                                let id = egui::ViewportId::from_hash_of(egui::Id::new("floating_term").with(leaf));
-                                                self.terminal_panel_state.floating_windows.push(crate::ui::FloatingWindow {
-                                                    id,
-                                                    layout,
-                                                    title,
-                                                    pos: pos.map(|(x, y)| egui::pos2(x, y)),
-                                                    size: egui::vec2(size.0, size.1),
-                                                    first_frame: true,
-                                                });
-                                            }
-                                            info!("Auto-loaded terminal layout from workspace root");
-                                        }
-                                        Err(e) => warn!("Failed to auto-load terminal layout: {}", e),
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     // Immediately save session to persist the workspace path
                     self.force_session_save();

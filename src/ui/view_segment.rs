@@ -64,58 +64,24 @@ impl ViewModeSegment {
         ui: &mut egui::Ui,
         current_mode: ViewMode,
         file_type: FileType,
-        is_dark: bool,
+        _is_dark: bool,
     ) -> Option<ViewSegmentAction> {
         let mut action: Option<ViewSegmentAction> = None;
+        let visuals = ui.visuals();
+        let dark_mode = visuals.dark_mode;
 
         // Determine which modes are available based on file type
-        let split_available = file_type.is_markdown() || file_type.is_tabular();
-        let rendered_available =
-            file_type.is_markdown() || file_type.is_structured() || file_type.is_tabular();
+        let split_available = file_type.is_markdown();
+        let rendered_available = file_type.is_markdown() || file_type.is_structured();
 
         // Colors - refined for a polished pill appearance
-        let bg_color = if is_dark {
-            Color32::from_rgb(45, 45, 48) // Subtle dark background
-        } else {
-            Color32::from_rgb(228, 228, 231) // Light gray background
-        };
-
-        let selected_bg = if is_dark {
-            Color32::from_rgb(70, 130, 180) // Steel blue for dark mode
-        } else {
-            Color32::from_rgb(255, 255, 255) // White pill for light mode
-        };
-
-        let hover_bg = if is_dark {
-            Color32::from_rgb(55, 55, 60)
-        } else {
-            Color32::from_rgb(240, 240, 243)
-        };
-
-        let text_color = if is_dark {
-            Color32::from_rgb(200, 200, 200)
-        } else {
-            Color32::from_rgb(60, 60, 65)
-        };
-
-        let selected_text = if is_dark {
-            Color32::from_rgb(255, 255, 255)
-        } else {
-            Color32::from_rgb(30, 30, 35)
-        };
-
-        let disabled_text = if is_dark {
-            Color32::from_rgb(80, 80, 85)
-        } else {
-            Color32::from_rgb(170, 170, 175)
-        };
-
-        // Border/shadow for depth
-        let border_color = if is_dark {
-            Color32::from_rgb(35, 35, 38)
-        } else {
-            Color32::from_rgb(200, 200, 205)
-        };
+        let bg_color = visuals.faint_bg_color;
+        let selected_bg = visuals.selection.bg_fill;
+        let hover_bg = visuals.widgets.hovered.weak_bg_fill;
+        let text_color = visuals.widgets.inactive.fg_stroke.color;
+        let selected_text = visuals.widgets.active.fg_stroke.color;
+        let disabled_text = visuals.widgets.noninteractive.fg_stroke.color;
+        let border_color = visuals.widgets.noninteractive.bg_stroke.color;
 
         // Calculate total width
         let total_width = SEGMENT_WIDTH * 3.0;
@@ -161,7 +127,7 @@ impl ViewModeSegment {
             ),
         ];
 
-        // First pass: draw selected indicator (so it appears behind icons)
+        // First pass: draw selected indicator
         let mut x_offset = rect.min.x;
         for (mode, _, _, _, _) in segments.iter() {
             if current_mode == *mode {
@@ -170,23 +136,11 @@ impl ViewModeSegment {
                     Vec2::new(SEGMENT_WIDTH, SEGMENT_HEIGHT),
                 );
 
-                // Inset the selected indicator slightly for a "floating pill" effect
                 let indicator_rect = segment_rect.shrink(INNER_PADDING);
-
-                // Draw selected pill with slight shadow effect in light mode
-                if !is_dark {
-                    // Subtle shadow
-                    ui.painter().rect_filled(
-                        indicator_rect.translate(Vec2::new(0.0, 1.0)),
-                        CORNER_ROUNDING - INNER_PADDING,
-                        Color32::from_rgba_unmultiplied(0, 0, 0, 15),
-                    );
-                }
-
-                ui.painter().rect_filled(
+                ui.painter().rect_stroke(
                     indicator_rect,
                     CORNER_ROUNDING - INNER_PADDING,
-                    selected_bg,
+                    egui::Stroke::new(1.5, selected_bg),
                 );
                 break;
             }
@@ -260,46 +214,16 @@ impl ViewModeSegment {
         &self,
         ui: &mut egui::Ui,
         current_mode: ViewMode,
-        is_dark: bool,
+        _is_dark: bool,
     ) -> Option<ViewSegmentAction> {
         let mut action: Option<ViewSegmentAction> = None;
-
-        // Colors
-        let bg_color = if is_dark {
-            Color32::from_rgb(45, 45, 48)
-        } else {
-            Color32::from_rgb(228, 228, 231)
-        };
-
-        let selected_bg = if is_dark {
-            Color32::from_rgb(70, 130, 180)
-        } else {
-            Color32::from_rgb(255, 255, 255)
-        };
-
-        let hover_bg = if is_dark {
-            Color32::from_rgb(55, 55, 60)
-        } else {
-            Color32::from_rgb(240, 240, 243)
-        };
-
-        let text_color = if is_dark {
-            Color32::from_rgb(200, 200, 200)
-        } else {
-            Color32::from_rgb(60, 60, 65)
-        };
-
-        let selected_text = if is_dark {
-            Color32::from_rgb(255, 255, 255)
-        } else {
-            Color32::from_rgb(30, 30, 35)
-        };
-
-        let border_color = if is_dark {
-            Color32::from_rgb(35, 35, 38)
-        } else {
-            Color32::from_rgb(200, 200, 205)
-        };
+        let visuals = ui.visuals();
+        let bg_color = visuals.faint_bg_color;
+        let selected_bg = visuals.selection.bg_fill;
+        let hover_bg = visuals.widgets.hovered.weak_bg_fill;
+        let text_color = visuals.widgets.inactive.fg_stroke.color;
+        let selected_text = visuals.widgets.active.fg_stroke.color;
+        let border_color = visuals.widgets.noninteractive.bg_stroke.color;
 
         // Two segments only
         let total_width = SEGMENT_WIDTH * 2.0;
@@ -334,18 +258,10 @@ impl ViewModeSegment {
                 );
                 let indicator_rect = segment_rect.shrink(INNER_PADDING);
 
-                if !is_dark {
-                    ui.painter().rect_filled(
-                        indicator_rect.translate(Vec2::new(0.0, 1.0)),
-                        CORNER_ROUNDING - INNER_PADDING,
-                        Color32::from_rgba_unmultiplied(0, 0, 0, 15),
-                    );
-                }
-
-                ui.painter().rect_filled(
+                ui.painter().rect_stroke(
                     indicator_rect,
                     CORNER_ROUNDING - INNER_PADDING,
-                    selected_bg,
+                    egui::Stroke::new(1.5, selected_bg),
                 );
                 break;
             }
@@ -425,27 +341,14 @@ impl TitleBarButton {
         icon: &str,
         tooltip: &str,
         is_active: bool,
-        is_dark: bool,
+        _is_dark: bool,
     ) -> Response {
         let size = Vec2::new(28.0, 24.0); // Slightly taller for better alignment
-        
-        let text_color = if is_dark {
-            Color32::from_rgb(220, 220, 220)
-        } else {
-            Color32::from_rgb(40, 40, 40)
-        };
-
-        let hover_bg = if is_dark {
-            Color32::from_rgb(60, 60, 60)
-        } else {
-            Color32::from_rgb(210, 210, 210)
-        };
-
-        let active_bg = if is_dark {
-            Color32::from_rgb(60, 90, 60) // Green-ish for active
-        } else {
-            Color32::from_rgb(200, 230, 200)
-        };
+        let visuals = ui.visuals();
+        let text_color = visuals.widgets.inactive.fg_stroke.color;
+        let hover_bg = visuals.widgets.hovered.weak_bg_fill;
+        let active_outline = visuals.selection.bg_fill;
+        let active_text = visuals.widgets.active.fg_stroke.color;
 
         let btn = ui.add(
             egui::Button::new(RichText::new(" ").size(14.0)) // Match icon size
@@ -456,7 +359,11 @@ impl TitleBarButton {
         // Draw background on hover or if active
         if is_active {
             ui.painter()
-                .rect_filled(btn.rect, egui::Rounding::same(3.0), active_bg);
+                .rect_stroke(
+                    btn.rect.shrink(0.5),
+                    egui::Rounding::same(3.0),
+                    egui::Stroke::new(1.5, active_outline),
+                );
         } else if btn.hovered() {
             ui.painter()
                 .rect_filled(btn.rect, egui::Rounding::same(3.0), hover_bg);
@@ -468,7 +375,7 @@ impl TitleBarButton {
             egui::Align2::CENTER_CENTER,
             icon,
             egui::FontId::proportional(14.0),
-            text_color,
+            if is_active { active_text } else { text_color },
         );
 
         btn.on_hover_text(tooltip)
@@ -480,9 +387,10 @@ impl TitleBarButton {
     pub fn show_auto_save(
         ui: &mut egui::Ui,
         enabled: bool,
-        is_dark: bool,
+        _is_dark: bool,
     ) -> Response {
         let size = Vec2::new(28.0, 24.0); // Match other title bar buttons
+        let visuals = ui.visuals();
         
         let icon = if enabled { "⏱" } else { "⏸" };
         let tooltip = if enabled {
@@ -493,22 +401,11 @@ impl TitleBarButton {
 
         // Green tint for enabled, muted for disabled
         let text_color = if enabled {
-            if is_dark {
-                Color32::from_rgb(100, 200, 100) // Green
-            } else {
-                Color32::from_rgb(40, 140, 40)
-            }
-        } else if is_dark {
-            Color32::from_rgb(120, 120, 120) // Muted
+            visuals.hyperlink_color
         } else {
-            Color32::from_rgb(140, 140, 140)
+            visuals.widgets.noninteractive.fg_stroke.color
         };
-
-        let hover_bg = if is_dark {
-            Color32::from_rgb(60, 60, 60)
-        } else {
-            Color32::from_rgb(210, 210, 210)
-        };
+        let hover_bg = visuals.widgets.hovered.weak_bg_fill;
 
         let btn = ui.add(
             egui::Button::new(RichText::new(" ").size(14.0)) // Match icon size

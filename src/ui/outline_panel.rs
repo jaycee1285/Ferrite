@@ -9,7 +9,7 @@ use crate::editor::{DocumentOutline, DocumentStats, OutlineItem, OutlineType, St
 use crate::ui::backlinks_panel::BacklinksPanel;
 use crate::ui::productivity_panel::ProductivityPanel;
 use eframe::egui::{self, Color32, Response, RichText, ScrollArea, Sense, Ui, Vec2};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -1008,7 +1008,7 @@ impl OutlinePanel {
         };
 
         let font_id = if item.level == 1 {
-            egui::FontId::new(11.0, egui::FontFamily::Name("Inter-Bold".into()))
+            egui::FontId::new(11.0, egui::FontFamily::Name(crate::fonts::FONT_INTER_BOLD.into()))
         } else {
             egui::FontId::proportional(11.0)
         };

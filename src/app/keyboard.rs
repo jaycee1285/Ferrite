@@ -4,22 +4,15 @@
 //! appropriate handler methods.
 
 use super::FerriteApp;
-use super::helpers::modifier_symbol;
 use super::types::KeyboardAction;
 use crate::config::ShortcutCommand;
 use crate::markdown::MarkdownFormatCommand;
 use eframe::egui;
 use log::{debug, info};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 impl FerriteApp {
     pub(crate) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        // Skip ALL keyboard shortcuts if terminal has focus
-        // Terminal handles its own keyboard input
-        if self.terminal_panel_state.terminal_has_focus {
-            return;
-        }
-
         // Get keyboard shortcuts configuration
         let shortcuts = self.state.settings.keyboard_shortcuts.clone();
 
@@ -43,16 +36,9 @@ impl FerriteApp {
             check_shortcut!(ShortcutCommand::NewTab, KeyboardAction::NewTab);
 
             // Navigation - check more specific shortcuts first
-            // Skip file tab navigation if terminal has focus (terminal handles its own tab switching)
-            if !self.terminal_panel_state.terminal_has_focus {
-                check_shortcut!(ShortcutCommand::PrevTab, KeyboardAction::PrevTab);
-                check_shortcut!(ShortcutCommand::NextTab, KeyboardAction::NextTab);
-            }
-
-            // Close tab - skip if terminal has focus (Ctrl+W is used for word deletion in terminal)
-            if !self.terminal_panel_state.terminal_has_focus {
-                check_shortcut!(ShortcutCommand::CloseTab, KeyboardAction::CloseTab);
-            }
+            check_shortcut!(ShortcutCommand::PrevTab, KeyboardAction::PrevTab);
+            check_shortcut!(ShortcutCommand::NextTab, KeyboardAction::NextTab);
+            check_shortcut!(ShortcutCommand::CloseTab, KeyboardAction::CloseTab);
             check_shortcut!(ShortcutCommand::GoToLine, KeyboardAction::GoToLine);
             check_shortcut!(ShortcutCommand::QuickOpen, KeyboardAction::QuickOpen);
 
@@ -64,7 +50,6 @@ impl FerriteApp {
             check_shortcut!(ShortcutCommand::ToggleOutline, KeyboardAction::ToggleOutline);
             check_shortcut!(ShortcutCommand::ToggleFileTree, KeyboardAction::ToggleFileTree);
             check_shortcut!(ShortcutCommand::TogglePipeline, KeyboardAction::TogglePipeline);
-            check_shortcut!(ShortcutCommand::ToggleTerminal, KeyboardAction::ToggleTerminal);
             check_shortcut!(ShortcutCommand::ToggleProductivityHub, KeyboardAction::ToggleProductivityHub);
 
             // Edit - note: Undo/Redo handled separately, MoveLineUp/Down handled separately
@@ -89,15 +74,12 @@ impl FerriteApp {
             check_shortcut!(ShortcutCommand::FormatLink, KeyboardAction::Format(MarkdownFormatCommand::Link));
             check_shortcut!(ShortcutCommand::FormatBlockquote, KeyboardAction::Format(MarkdownFormatCommand::Blockquote));
             check_shortcut!(ShortcutCommand::FormatInlineCode, KeyboardAction::Format(MarkdownFormatCommand::InlineCode));
-            // Skip markdown heading shortcuts if terminal has focus (terminal uses Ctrl+1-9 for tab selection)
-            if !self.terminal_panel_state.terminal_has_focus {
-                check_shortcut!(ShortcutCommand::FormatHeading1, KeyboardAction::Format(MarkdownFormatCommand::Heading(1)));
-                check_shortcut!(ShortcutCommand::FormatHeading2, KeyboardAction::Format(MarkdownFormatCommand::Heading(2)));
-                check_shortcut!(ShortcutCommand::FormatHeading3, KeyboardAction::Format(MarkdownFormatCommand::Heading(3)));
-                check_shortcut!(ShortcutCommand::FormatHeading4, KeyboardAction::Format(MarkdownFormatCommand::Heading(4)));
-                check_shortcut!(ShortcutCommand::FormatHeading5, KeyboardAction::Format(MarkdownFormatCommand::Heading(5)));
-                check_shortcut!(ShortcutCommand::FormatHeading6, KeyboardAction::Format(MarkdownFormatCommand::Heading(6)));
-            }
+            check_shortcut!(ShortcutCommand::FormatHeading1, KeyboardAction::Format(MarkdownFormatCommand::Heading(1)));
+            check_shortcut!(ShortcutCommand::FormatHeading2, KeyboardAction::Format(MarkdownFormatCommand::Heading(2)));
+            check_shortcut!(ShortcutCommand::FormatHeading3, KeyboardAction::Format(MarkdownFormatCommand::Heading(3)));
+            check_shortcut!(ShortcutCommand::FormatHeading4, KeyboardAction::Format(MarkdownFormatCommand::Heading(4)));
+            check_shortcut!(ShortcutCommand::FormatHeading5, KeyboardAction::Format(MarkdownFormatCommand::Heading(5)));
+            check_shortcut!(ShortcutCommand::FormatHeading6, KeyboardAction::Format(MarkdownFormatCommand::Heading(6)));
 
             // Folding
             check_shortcut!(ShortcutCommand::FoldAll, KeyboardAction::FoldAll);
@@ -251,23 +233,10 @@ impl FerriteApp {
             KeyboardAction::TogglePipeline => {
                 self.handle_toggle_pipeline();
             }
-            KeyboardAction::ToggleTerminal => {
-                self.handle_toggle_terminal();
-            }
             KeyboardAction::ToggleProductivityHub => {
-                if self.state.settings.productivity_panel_docked {
-                    // When docked, toggle the outline panel and switch to Productivity tab
-                    if self.state.settings.outline_enabled
-                        && self.outline_panel.active_tab() == crate::ui::OutlinePanelTab::Productivity
-                    {
-                        self.state.settings.outline_enabled = false;
-                    } else {
-                        self.state.settings.outline_enabled = true;
-                        self.outline_panel.set_active_tab(crate::ui::OutlinePanelTab::Productivity);
-                    }
-                } else {
-                    self.state.settings.productivity_panel_visible = !self.state.settings.productivity_panel_visible;
-                }
+                self.state.settings.productivity_panel_docked = false;
+                self.state.settings.productivity_panel_visible =
+                    !self.state.settings.productivity_panel_visible;
                 self.state.mark_settings_dirty();
             }
             KeyboardAction::GoToLine => {

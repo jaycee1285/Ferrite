@@ -14,7 +14,7 @@ use crate::ui::TabPipelineState;
 use crate::vcs::GitService;
 use crate::workspaces::{ filter_events, AppMode, Workspace, WorkspaceEvent, WorkspaceWatcher };
 use log::{ debug, info, warn };
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{ Hash, Hasher };
@@ -101,7 +101,7 @@ impl FileType {
 
     /// Check if this file type supports split view (raw + rendered side-by-side).
     pub fn supports_split(&self) -> bool {
-        self.is_markdown() || self.is_tabular()
+        self.is_markdown()
     }
 
     /// Get a display name for this file type.

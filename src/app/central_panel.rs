@@ -21,9 +21,6 @@ use crate::markdown::{
     apply_raw_format,
     cleanup_rendered_editor_memory,
     get_structured_file_type,
-    get_tabular_file_type,
-    CsvViewer,
-    CsvViewerState,
     EditorMode,
     FormattingState,
     MarkdownEditor,
@@ -39,7 +36,7 @@ use crate::theme::ThemeColors;
 use crate::ui::{ FileOperationResult, FormatToolbar, GoToLineResult, RibbonAction };
 use eframe::egui;
 use log::{ debug, info, trace, warn };
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::collections::HashMap;
 
 impl FerriteApp {
@@ -129,6 +126,7 @@ impl FerriteApp {
                 // Render tabs
                 let is_dark = ui.visuals().dark_mode;
                 let selected_bg = ui.visuals().selection.bg_fill;
+                let selected_text = ui.visuals().widgets.active.fg_stroke.color;
                 let hover_bg = if is_dark {
                     egui::Color32::from_rgb(60, 60, 70)
                 } else {
@@ -193,7 +191,11 @@ impl FerriteApp {
                         };
                         ui.painter().rect_filled(tab_rect, 4.0, indicator_color);
                     } else if *selected {
-                        ui.painter().rect_filled(tab_rect, 4.0, selected_bg);
+                        ui.painter().rect_stroke(
+                            tab_rect.shrink(0.5),
+                            4.0,
+                            egui::Stroke::new(1.5, selected_bg),
+                        );
                     } else if tab_response.hovered() {
                         ui.painter().rect_filled(tab_rect, 4.0, hover_bg);
                     }
@@ -209,7 +211,7 @@ impl FerriteApp {
                         egui::Align2::LEFT_CENTER,
                         title,
                         egui::FontId::default(),
-                        text_color
+                        if *selected { selected_text } else { text_color }
                     );
 
                     // Draw close button
@@ -225,6 +227,8 @@ impl FerriteApp {
 
                     let close_color = if close_response.hovered() {
                         egui::Color32::from_rgb(220, 80, 80)
+                    } else if *selected {
+                        selected_text
                     } else {
                         text_color
                     };
@@ -386,14 +390,17 @@ impl FerriteApp {
                         (
                             t.id,
                             t.view_mode,
+                            t.path
+                                .as_ref()
+                                .map(|p| FileType::from_path(p))
+                                .unwrap_or(FileType::Unknown),
                             t.path.as_ref().and_then(|p| get_structured_file_type(p)),
-                            t.path.as_ref().and_then(|p| get_tabular_file_type(p)),
                             t.transient_highlight_range(),
                         )
                     });
 
                 if
-                    let Some((tab_id, view_mode, structured_type, tabular_type, transient_hl)) =
+                    let Some((tab_id, view_mode, file_type, structured_type, transient_hl)) =
                         tab_info
                 {
                     match view_mode {
@@ -872,9 +879,8 @@ impl FerriteApp {
                             // Split view: raw editor on left, rendered preview on right
                             // Not available for structured files
 
-                            if structured_type.is_some() {
-                                // Structured (JSON/YAML/TOML) files don't support split view,
-                                // switch to Raw mode. CSV/TSV files DO support split view.
+                            if structured_type.is_some() || file_type.is_tabular() {
+                                // Structured and tabular files fall back to raw mode in this fork.
                                 if let Some(tab) = self.state.active_tab_mut() {
                                     tab.view_mode = ViewMode::Raw;
                                 }
@@ -1454,103 +1460,83 @@ impl FerriteApp {
                                     None
                                 );
 
-                                // Check if this is a CSV/TSV file for the right pane
-                                if let Some(file_type) = tabular_type {
-                                    // Tabular file: use the CsvViewer (read-only table view)
-                                    let csv_state = self.csv_viewer_states
-                                        .entry(tab_id)
-                                        .or_default();
-                                    let rainbow_columns = self.state.settings.csv_rainbow_columns;
+                                // Rendered pane - fully editable like the main Rendered mode
+                                // Edits here modify tab.content directly, with proper undo/redo support
+                                // Collect workspace root before mutable borrow
+                                let ws_root = self.state.workspace_root().cloned();
+                                if let Some(tab) = self.state.active_tab_mut() {
+                                    // Capture content and cursor before editing for undo support
+                                    let content_before = tab.content.clone();
+                                    let cursor_before = tab.cursors.primary().head;
 
-                                    if let Some(tab) = self.state.active_tab_mut() {
-                                        let _output = CsvViewer::new(
-                                            &tab.content,
-                                            file_type,
-                                            csv_state
-                                        )
-                                            .font_size(font_size)
-                                            .rainbow_columns(rainbow_columns)
-                                            .show(&mut right_ui);
+                                    // Build wikilink context from current file and workspace
+                                    let wl_ctx = WikilinkContext {
+                                        current_dir: tab.path
+                                            .as_ref()
+                                            .and_then(|p| p.parent().map(|d| d.to_path_buf())),
+                                        workspace_root: ws_root.clone(),
+                                    };
+
+                                    let md_editor_output = MarkdownEditor::new(&mut tab.content)
+                                        .mode(EditorMode::Rendered)
+                                        .font_size(font_size)
+                                        .font_family(font_family.clone())
+                                        .word_wrap(word_wrap)
+                                        .theme(theme)
+                                        .max_line_width(max_line_width)
+                                        .zen_mode(zen_mode, zen_max_column_width) // Apply Zen Mode centering
+                                        .paragraph_indent(paragraph_indent) // CJK paragraph indentation
+                                        .wikilink_context(wl_ctx)
+                                        .id(egui::Id::new("split_preview_rendered"))
+                                        .pending_scroll_offset(pending_preview_scroll)
+                                        .show(&mut right_ui);
+
+                                    // Capture scroll metrics for sync scrolling
+                                    preview_scroll_offset = Some(
+                                        md_editor_output.scroll_offset
+                                    );
+                                    preview_content_height = Some(
+                                        md_editor_output.content_height
+                                    );
+                                    preview_viewport_height = Some(
+                                        md_editor_output.viewport_height
+                                    );
+                                    preview_line_mappings =
+                                        md_editor_output.line_mappings.clone();
+
+                                    if md_editor_output.changed {
+                                        // Record edit for undo/redo support
+                                        tab.record_edit(content_before, cursor_before);
+                                        // Mark content as edited for auto-save scheduling
+                                        tab.mark_content_edited();
+                                        debug!(
+                                            "Content modified in split rendered pane, recorded for undo"
+                                        );
                                     }
-                                } else {
-                                    // Rendered pane - fully editable like the main Rendered mode
-                                    // Edits here modify tab.content directly, with proper undo/redo support
-                                    // Collect workspace root before mutable borrow
-                                    let ws_root = self.state.workspace_root().cloned();
-                                    if let Some(tab) = self.state.active_tab_mut() {
-                                        // Capture content and cursor before editing for undo support
-                                        let content_before = tab.content.clone();
-                                        let cursor_before = tab.cursors.primary().head;
 
-                                        // Build wikilink context from current file and workspace
-                                        let wl_ctx = WikilinkContext {
-                                            current_dir: tab.path
-                                                .as_ref()
-                                                .and_then(|p| p.parent().map(|d| d.to_path_buf())),
-                                            workspace_root: ws_root.clone(),
-                                        };
+                                    // Don't update cursor_position in Split mode - the raw editor (left pane)
+                                    // already maintains it via sync_cursor_from_primary(). Overwriting it here
+                                    // would break line operations (delete line, move line) when editing the raw pane.
+                                    // cursor_position is only needed for Rendered-only mode.
 
-                                        let md_editor_output = MarkdownEditor::new(&mut tab.content)
-                                            .mode(EditorMode::Rendered)
-                                            .font_size(font_size)
-                                            .font_family(font_family.clone())
-                                            .word_wrap(word_wrap)
-                                            .theme(theme)
-                                            .max_line_width(max_line_width)
-                                            .zen_mode(zen_mode, zen_max_column_width) // Apply Zen Mode centering
-                                            .paragraph_indent(paragraph_indent) // CJK paragraph indentation
-                                            .wikilink_context(wl_ctx)
-                                            .id(egui::Id::new("split_preview_rendered"))
-                                            .pending_scroll_offset(pending_preview_scroll)
-                                            .show(&mut right_ui);
-
-                                        // Capture scroll metrics for sync scrolling
-                                        preview_scroll_offset = Some(
-                                            md_editor_output.scroll_offset
-                                        );
-                                        preview_content_height = Some(
-                                            md_editor_output.content_height
-                                        );
-                                        preview_viewport_height = Some(
-                                            md_editor_output.viewport_height
-                                        );
-                                        preview_line_mappings =
-                                            md_editor_output.line_mappings.clone();
-
-                                        if md_editor_output.changed {
-                                            // Record edit for undo/redo support
-                                            tab.record_edit(content_before, cursor_before);
-                                            // Mark content as edited for auto-save scheduling
-                                            tab.mark_content_edited();
-                                            debug!(
-                                                "Content modified in split rendered pane, recorded for undo"
-                                            );
-                                        }
-
-                                        // Don't update cursor_position in Split mode - the raw editor (left pane)
-                                        // already maintains it via sync_cursor_from_primary(). Overwriting it here
-                                        // would break line operations (delete line, move line) when editing the raw pane.
-                                        // cursor_position is only needed for Rendered-only mode.
-
-                                        // Update selection from focused element (for formatting toolbar)
-                                        if let Some(focused) = md_editor_output.focused_element {
-                                            if let Some((sel_start, sel_end)) = focused.selection {
-                                                if sel_start != sel_end {
-                                                    let abs_start = focused.start_char + sel_start;
-                                                    let abs_end = focused.start_char + sel_end;
-                                                    tab.selection = Some((abs_start, abs_end));
-                                                } else {
-                                                    tab.selection = None;
-                                                }
+                                    // Update selection from focused element (for formatting toolbar)
+                                    if let Some(focused) = md_editor_output.focused_element {
+                                        if let Some((sel_start, sel_end)) = focused.selection {
+                                            if sel_start != sel_end {
+                                                let abs_start = focused.start_char + sel_start;
+                                                let abs_end = focused.start_char + sel_end;
+                                                tab.selection = Some((abs_start, abs_end));
                                             } else {
                                                 tab.selection = None;
                                             }
+                                        } else {
+                                            tab.selection = None;
                                         }
+                                    }
 
-                                        // Handle wikilink navigation
-                                        if let Some(target) = md_editor_output.wikilink_clicked {
-                                            pending_wikilink_target = Some(target);
-                                        }
+                                    // Handle wikilink navigation
+                                    if let Some(target) = md_editor_output.wikilink_clicked {
+                                        pending_wikilink_target = Some(target);
                                     }
                                 }
 
@@ -1656,20 +1642,9 @@ impl FerriteApp {
                             }
                         }
                         ViewMode::Rendered => {
-                            // Check if this is a tabular file (CSV, TSV)
-                            if let Some(file_type) = tabular_type {
-                                // Tabular file: use the CsvViewer (read-only table view)
-                                let csv_state = self.csv_viewer_states.entry(tab_id).or_default();
-                                let rainbow_columns = self.state.settings.csv_rainbow_columns;
-
+                            if file_type.is_tabular() {
                                 if let Some(tab) = self.state.active_tab_mut() {
-                                    let output = CsvViewer::new(&tab.content, file_type, csv_state)
-                                        .font_size(font_size)
-                                        .rainbow_columns(rainbow_columns)
-                                        .show(ui);
-
-                                    // Update scroll offset for sync scrolling
-                                    tab.scroll_offset = output.scroll_offset;
+                                    tab.view_mode = ViewMode::Raw;
                                 }
                             } else if let Some(file_type) = structured_type {
                                 // Structured file (JSON, YAML, TOML): use the TreeViewer
@@ -1969,7 +1944,8 @@ impl FerriteApp {
 
                 // Trigger search when requested
                 if output.should_search {
-                    self.search_panel.search(&all_files, &hidden_patterns);
+                    self.search_panel
+                        .search(&workspace_root, &all_files, &hidden_patterns);
                 }
 
                 // Handle navigation to file

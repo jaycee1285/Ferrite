@@ -54,6 +54,8 @@ pub struct ThemeManager {
     needs_apply: bool,
     /// Last detected system dark mode state (for System theme)
     last_system_dark_mode: Option<bool>,
+    /// Optional theme colors derived from the local GTK CSS palette.
+    gtk_theme_colors: Option<ThemeColors>,
 }
 
 impl ThemeManager {
@@ -71,6 +73,7 @@ impl ThemeManager {
             cached_visuals: None,
             needs_apply: true,
             last_system_dark_mode: None,
+            gtk_theme_colors: ThemeColors::from_gtk_css(),
         }
     }
 
@@ -184,13 +187,18 @@ impl ThemeManager {
             Theme::Light => light::create_light_visuals(),
             Theme::Dark => dark::create_dark_visuals(),
             Theme::System => {
-                // Follow system preference
-                let system_dark = ctx.style().visuals.dark_mode;
-                self.last_system_dark_mode = Some(system_dark);
-                if system_dark {
-                    dark::create_dark_visuals()
+                if let Some(colors) = self.gtk_theme_colors.clone() {
+                    self.last_system_dark_mode = Some(colors.is_dark());
+                    colors.to_visuals()
                 } else {
-                    light::create_light_visuals()
+                    // Follow system preference
+                    let system_dark = ctx.style().visuals.dark_mode;
+                    self.last_system_dark_mode = Some(system_dark);
+                    if system_dark {
+                        dark::create_dark_visuals()
+                    } else {
+                        light::create_light_visuals()
+                    }
                 }
             }
         };
@@ -204,7 +212,13 @@ impl ThemeManager {
     /// This returns the `ThemeColors` for the effective theme (resolving System
     /// to the actual light/dark variant).
     pub fn colors(&self, ctx: &Context) -> ThemeColors {
-        ThemeColors::from_theme(self.current_theme, &ctx.style().visuals)
+        match self.current_theme {
+            Theme::System => self
+                .gtk_theme_colors
+                .clone()
+                .unwrap_or_else(|| ThemeColors::from_theme(self.current_theme, &ctx.style().visuals)),
+            _ => ThemeColors::from_theme(self.current_theme, &ctx.style().visuals),
+        }
     }
 
     /// Check if the current effective theme is dark.
@@ -214,7 +228,11 @@ impl ThemeManager {
         match self.current_theme {
             Theme::Dark => true,
             Theme::Light => false,
-            Theme::System => ctx.style().visuals.dark_mode,
+            Theme::System => self
+                .gtk_theme_colors
+                .as_ref()
+                .map(|colors| colors.is_dark())
+                .unwrap_or_else(|| ctx.style().visuals.dark_mode),
         }
     }
 

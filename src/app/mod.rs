@@ -58,20 +58,14 @@ use crate::fonts;
 use crate::markdown::{
     apply_raw_format,
     cleanup_rendered_editor_memory,
-    delimiter_display_name,
-    delimiter_symbol,
     get_structured_file_type,
-    get_tabular_file_type,
     insert_or_update_toc,
-    CsvViewer,
-    CsvViewerState,
     EditorMode,
     MarkdownEditor,
     MarkdownFormatCommand,
     TocOptions,
     TreeViewer,
     TreeViewerState,
-    DELIMITERS,
 };
 // Note: SyncScrollState is available for future split-view sync scrolling
 #[allow(unused_imports)]
@@ -98,9 +92,7 @@ use crate::ui::{
     SearchPanel,
     SettingsPanel,
     TitleBarButton,
-    TerminalPanel,
     WelcomePanel,
-    TerminalPanelState,
     ViewModeSegment,
     ViewSegmentAction,
     WindowResizeState,
@@ -111,7 +103,7 @@ use crate::workers::{ echo_worker, WorkerCommand, WorkerHandle, WorkerResponse }
 
 use eframe::egui;
 use log::{ debug, info, trace, warn };
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::collections::HashMap;
 
 /// Keyboard shortcut actions that need to be deferred.
@@ -155,8 +147,6 @@ pub struct FerriteApp {
     pending_scroll_to_line: Option<usize>,
     /// Tree viewer states per tab (keyed by tab ID)
     tree_viewer_states: HashMap<usize, TreeViewerState>,
-    /// CSV viewer states per tab (keyed by tab ID)
-    csv_viewer_states: HashMap<usize, CsvViewerState>,
     /// Sync scroll states per tab (keyed by tab ID)
     /// Used for bidirectional scroll synchronization in split view
     sync_scroll_states: HashMap<usize, SyncScrollState>,
@@ -185,10 +175,6 @@ pub struct FerriteApp {
     pending_auto_save_recovery: Option<AutoSaveRecoveryInfo>,
     /// Snippet manager for text expansion
     snippet_manager: SnippetManager,
-    /// Terminal panel component
-    terminal_panel: TerminalPanel,
-    /// Terminal panel state
-    terminal_panel_state: TerminalPanelState,
     /// Productivity hub panel component
     productivity_panel: ProductivityPanel,
     /// Frame counter for FPS tracking (diagnostic for repaint optimization)
@@ -335,6 +321,8 @@ impl FerriteApp {
         }
         crate::log_memory("After font configuration");
 
+        state.settings.outline_enabled = false;
+
         // Initialize outline panel with saved settings
         let outline_panel = OutlinePanel::new()
             .with_width(state.settings.outline_width)
@@ -350,14 +338,6 @@ impl FerriteApp {
             state.settings.pipeline_max_runtime_ms as u64
         );
         pipeline_panel.set_recent_commands(state.settings.pipeline_recent_commands.clone());
-
-        // Determine if we need to show recovery dialog
-        // Clone the session for CSV delimiter restoration if needed
-        let session_for_csv = if !needs_recovery_dialog {
-            recovery_result.session.clone()
-        } else {
-            None
-        };
 
         let (show_recovery_dialog, pending_recovery) = if needs_recovery_dialog {
             info!("Crash recovery detected with unsaved changes - will prompt user");
@@ -378,11 +358,6 @@ impl FerriteApp {
 
         crate::log_memory("Before creating panels");
 
-        // Create terminal panel components
-        let terminal_panel = TerminalPanel::new();
-        crate::log_memory("After TerminalPanel::new()");
-        let terminal_panel_state = TerminalPanelState::new();
-        crate::log_memory("After TerminalPanelState::new()");
         let productivity_panel = ProductivityPanel::new();
         crate::log_memory("After ProductivityPanel::new()");
 
@@ -406,7 +381,6 @@ impl FerriteApp {
             last_outline_content_hash: 0,
             pending_scroll_to_line: None,
             tree_viewer_states: HashMap::new(),
-            csv_viewer_states: HashMap::new(),
             sync_scroll_states: HashMap::new(),
             should_exit: false,
             last_window_size: None,
@@ -420,8 +394,6 @@ impl FerriteApp {
             pending_recovery,
             pending_auto_save_recovery: None,
             snippet_manager,
-            terminal_panel,
-            terminal_panel_state,
             productivity_panel,
             #[cfg(debug_assertions)]
             frame_count: 0,
@@ -439,11 +411,6 @@ impl FerriteApp {
             #[cfg(feature = "async-workers")]
             echo_demo_input: String::new(),
         };
-
-        // Restore CSV delimiter overrides from session if available
-        if let Some(session) = session_for_csv {
-            app.restore_csv_delimiters(&session);
-        }
 
         crate::log_memory("App::new() complete");
         app
@@ -723,7 +690,6 @@ impl FerriteApp {
         if self.session_save_throttle.should_save() {
             let mut session_state = self.state.capture_session_state();
             session_state.clean_shutdown = false; // This is a crash recovery snapshot
-            self.inject_csv_delimiters(&mut session_state);
 
             if save_crash_recovery_state(&session_state) {
                 // Also save recovery content for tabs with unsaved changes
@@ -742,50 +708,10 @@ impl FerriteApp {
         self.session_save_throttle.mark_dirty();
     }
 
-    /// Inject CSV delimiter overrides into session state from csv_viewer_states.
-    ///
-    /// This transfers any manually-set delimiter preferences from the UI state
-    /// to the session state for persistence.
-    fn inject_csv_delimiters(&self, session_state: &mut crate::config::SessionState) {
-        for tab in &mut session_state.tabs {
-            if let Some(csv_state) = self.csv_viewer_states.get(&tab.tab_id) {
-                tab.csv_delimiter = csv_state.delimiter_override();
-            }
-        }
-    }
-
-    /// Restore CSV delimiter overrides from session state into csv_viewer_states.
-    ///
-    /// This is called after session restoration to apply any saved delimiter
-    /// preferences to the CSV viewer state.
-    fn restore_csv_delimiters(&mut self, session: &crate::config::SessionState) {
-        for session_tab in &session.tabs {
-            if let Some(delimiter) = session_tab.csv_delimiter {
-                // Find the corresponding tab in the current state
-                // Note: tab IDs may have changed during restoration, so we match by path
-                if
-                    let Some(tab) = self.state
-                        .tabs()
-                        .iter()
-                        .find(|t| t.path == session_tab.path)
-                {
-                    let csv_state = self.csv_viewer_states.entry(tab.id).or_default();
-                    csv_state.set_delimiter(delimiter);
-                    debug!(
-                        "Restored CSV delimiter override for tab {}: {}",
-                        tab.id,
-                        delimiter_display_name(delimiter)
-                    );
-                }
-            }
-        }
-    }
-
     /// Clean up viewer state HashMap entries and egui temporary data when a tab is closed.
     ///
     /// This prevents memory leaks by removing entries for closed tabs from:
     /// - `tree_viewer_states` (JSON/YAML/TOML tree view state)
-    /// - `csv_viewer_states` (CSV/TSV viewer state with delimiter overrides)
     /// - `sync_scroll_states` (split-view sync scroll state)
     /// - egui memory temp data (rendered editor widget states like FormattedItemEditState,
     ///   CodeBlockData, MermaidBlockData, TableData, TableEditState, RenderedLinkState)
@@ -798,7 +724,6 @@ impl FerriteApp {
     /// Should be called after a tab is closed, using the tab's unique ID.
     fn cleanup_tab_state(&mut self, tab_id: usize, ctx: Option<&egui::Context>) {
         self.tree_viewer_states.remove(&tab_id);
-        self.csv_viewer_states.remove(&tab_id);
         self.sync_scroll_states.remove(&tab_id);
 
         // Clean up egui temporary data for rendered editor widgets
@@ -1290,10 +1215,6 @@ impl FerriteApp {
                         current_time,
                         3.0
                     );
-                    // Restore CSV delimiter overrides
-                    if let Some(session) = session {
-                        self.restore_csv_delimiters(&session);
-                    }
                 }
             }
             // Clear recovery data after successful restore
@@ -1311,26 +1232,15 @@ impl FerriteApp {
     /// Returns a deferred format action if one was requested from the ribbon.
     fn render_ui(&mut self, ctx: &egui::Context) -> Option<DeferredFormatAction> {
         let is_maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
-        let is_dark = ctx.style().visuals.dark_mode;
+        let is_dark = self.theme_manager.is_dark(ctx);
         let zen_mode = self.state.is_zen_mode();
+        let theme_colors = self.theme_manager.colors(ctx);
 
         // Title bar colors
-        let title_bar_color = if is_dark {
-            egui::Color32::from_rgb(32, 32, 32)
-        } else {
-            egui::Color32::from_rgb(240, 240, 240)
-        };
-        let button_hover_color = if is_dark {
-            egui::Color32::from_rgb(60, 60, 60)
-        } else {
-            egui::Color32::from_rgb(210, 210, 210)
-        };
+        let title_bar_color = theme_colors.base.background_secondary;
+        let button_hover_color = theme_colors.base.hover;
         let close_hover_color = egui::Color32::from_rgb(232, 17, 35);
-        let text_color = if is_dark {
-            egui::Color32::from_rgb(220, 220, 220)
-        } else {
-            egui::Color32::from_rgb(30, 30, 30)
-        };
+        let text_color = theme_colors.text.primary;
 
         // Render custom title bar
         self.render_title_bar(
@@ -1349,7 +1259,6 @@ impl FerriteApp {
         // Ribbon panel (below view menu) - hidden in Zen Mode
         let ribbon_action = if !zen_mode {
             // Get state needed for ribbon
-            let theme = self.state.settings.theme;
             let view_mode = self.state
                 .active_tab()
                 .map(|t| t.view_mode)
@@ -1368,13 +1277,7 @@ impl FerriteApp {
                 .map(|t| t.path.is_some() && t.is_modified())
                 .unwrap_or(false);
 
-            let theme_colors = ThemeColors::from_theme(theme, &ctx.style().visuals);
-
-            let ribbon_bg = if is_dark {
-                egui::Color32::from_rgb(40, 40, 40)
-            } else {
-                egui::Color32::from_rgb(248, 248, 248)
-            };
+            let ribbon_bg = theme_colors.base.background_secondary;
 
             let mut action = None;
             egui::TopBottomPanel
@@ -1421,7 +1324,7 @@ impl FerriteApp {
                         can_save,
                         self.state.active_tab().is_some(),
                         formatting_state.as_ref(),
-                        self.state.settings.outline_enabled,
+                        false,
                         self.state.settings.sync_scroll_enabled,
                         self.state.is_workspace_mode(),
                         file_type,
@@ -1522,11 +1425,7 @@ impl FerriteApp {
 
         // Status bar - hidden in Zen Mode
         if !zen_mode {
-            let (rainbow_toggle, encoding_change) = self.render_status_bar(ctx, is_dark);
-            if rainbow_toggle {
-                self.state.settings.csv_rainbow_columns = !self.state.settings.csv_rainbow_columns;
-                self.state.mark_settings_dirty();
-            }
+            let (_, encoding_change) = self.render_status_bar(ctx, is_dark);
             if let Some(encoding) = encoding_change {
                 if let Some(tab) = self.state.active_tab_mut() {
                     tab.current_encoding = encoding;
@@ -1546,75 +1445,7 @@ impl FerriteApp {
         // Track backlink navigation request from outline panel
         let mut backlink_navigate_to: Option<std::path::PathBuf> = None;
 
-        // Side panel toggle strip (shown when outline panel is closed, hidden in Zen Mode)
-        if !self.state.settings.outline_enabled && !zen_mode {
-            if crate::ui::side_panel_toggle_strip(ctx, is_dark) {
-                self.state.settings.outline_enabled = true;
-                self.state.mark_settings_dirty();
-            }
-        }
-
-        if self.state.settings.outline_enabled && !zen_mode {
-            // Update outline if content changed
-            self.update_outline_if_needed();
-
-            // Determine current section based on cursor position
-            let current_line = self.state
-                .active_tab()
-                .map(|t| t.cursor_position.0 + 1) // Convert to 1-indexed
-                .unwrap_or(0);
-            let current_section = self.cached_outline.find_current_section(current_line);
-
-            // Detect tab switch and refresh backlinks
-            let current_tab_idx = self.state.active_tab_index();
-            if current_tab_idx != self.last_active_tab_for_backlinks {
-                self.last_active_tab_for_backlinks = current_tab_idx;
-                self.backlinks_need_refresh = true;
-            }
-
-            // Refresh backlinks if needed (tab switch or file save)
-            if self.backlinks_need_refresh {
-                self.refresh_backlinks();
-                self.backlinks_need_refresh = false;
-            }
-
-            // Configure and render the outline panel
-            self.outline_panel.set_side(self.state.settings.outline_side);
-            self.outline_panel.set_current_section(current_section);
-            let docked = self.state.settings.productivity_panel_docked;
-            let outline_output = self.outline_panel.show(
-                ctx,
-                &self.cached_outline,
-                self.cached_doc_stats.as_ref(),
-                is_dark,
-                if docked {
-                    Some(&mut self.productivity_panel)
-                } else {
-                    None
-                },
-                Some(&self.backlinks_panel)
-            );
-
-            // Capture output for processing after render
-            if let Some(line) = outline_output.scroll_to_line {
-                outline_nav_request = Some(HeadingNavRequest {
-                    line,
-                    char_offset: outline_output.scroll_to_char,
-                    title: outline_output.scroll_to_title,
-                    level: outline_output.scroll_to_level,
-                });
-            }
-            outline_toggled_id = outline_output.toggled_id;
-            outline_new_width = outline_output.new_width;
-            outline_close_requested = outline_output.close_requested;
-            outline_detach_productivity = outline_output.detach_productivity;
-            backlink_navigate_to = outline_output.backlink_navigate_to;
-
-            // Handle repaint request from productivity panel (e.g. timer)
-            if outline_output.needs_repaint {
-                ctx.request_repaint_after(std::time::Duration::from_secs(1));
-            }
-        }
+        self.state.settings.outline_enabled = false;
 
         // Handle outline panel interactions - navigate with text matching and transient highlight
         if let Some(nav) = outline_nav_request {
@@ -1860,85 +1691,6 @@ impl FerriteApp {
                 });
         }
 
-        // Terminal panel (bottom panel, shown when visible)
-        // Similar to pipeline panel but for integrated terminal
-        if self.terminal_panel_state.is_visible() && !zen_mode {
-            let panel_height = self.terminal_panel_state.height;
-            egui::TopBottomPanel
-                ::bottom("terminal_panel")
-                .resizable(false) // We handle resize ourselves
-                .exact_height(panel_height)
-                .show(ctx, |ui| {
-                    // Custom resize handle at the top of the panel
-                    let resize_response = ui.allocate_response(
-                        egui::vec2(ui.available_width(), 6.0),
-                        egui::Sense::drag()
-                    );
-
-                    // Draw resize handle (thin line)
-                    let handle_rect = resize_response.rect;
-                    let handle_color = if resize_response.hovered() || resize_response.dragged() {
-                        if is_dark {
-                            egui::Color32::from_rgb(100, 100, 120)
-                        } else {
-                            egui::Color32::from_rgb(160, 160, 180)
-                        }
-                    } else {
-                        if is_dark {
-                            egui::Color32::from_rgb(60, 60, 70)
-                        } else {
-                            egui::Color32::from_rgb(200, 200, 210)
-                        }
-                    };
-                    ui.painter().rect_filled(
-                        egui::Rect::from_center_size(handle_rect.center(), egui::vec2(60.0, 3.0)),
-                        2.0,
-                        handle_color
-                    );
-
-                    // Change cursor on hover
-                    if resize_response.hovered() || resize_response.dragged() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
-                    }
-
-                    // Handle drag to resize (dragging up = increase height, dragging down = decrease)
-                    if resize_response.dragged() {
-                        let delta = -resize_response.drag_delta().y; // Negative because up = bigger
-                        let new_height = (panel_height + delta).clamp(100.0, 3000.0);
-                        if (new_height - panel_height).abs() > 0.5 {
-                            self.terminal_panel_state.height = new_height;
-                            self.state.settings.terminal_panel_height = new_height;
-                            self.state.mark_settings_dirty();
-                        }
-                    }
-
-                    // Show the terminal panel UI
-                    let output = self.terminal_panel.show(
-                        ui,
-                        &mut self.terminal_panel_state,
-                        &self.state.settings,
-                        is_dark
-                    );
-
-                    // Handle panel close
-                    if output.closed {
-                        self.terminal_panel_state.visible = false;
-                    }
-                });
-
-            // Handle terminal errors as toast notifications
-            let time = ctx.input(|i| i.time);
-            if let Some(error_msg) = self.terminal_panel_state.take_error() {
-                self.state.show_toast(error_msg, time, 4.0);
-            }
-
-            // Check for exited terminal processes
-            for msg in self.terminal_panel_state.check_exited_terminals() {
-                log::info!("{}", msg);
-                self.state.show_toast(msg, time, 3.0);
-            }
-        }
-
         // Echo Demo Panel (placeholder for AI Assistant)
         // This demonstrates async workers via lazy initialization
         #[cfg(feature = "async-workers")]
@@ -1989,18 +1741,13 @@ impl FerriteApp {
         }
 
         // Productivity Hub Panel (floating/detached mode only)
-        if
-            self.state.settings.productivity_panel_visible &&
-            !self.state.settings.productivity_panel_docked
-        {
+        if self.state.settings.productivity_panel_visible {
             self.productivity_panel.show(ctx, &mut self.state.settings.productivity_panel_visible);
 
-            // Check if user clicked "Dock" to re-attach to outline panel
+            // This fork removes the outline surface, so productivity stays floating.
             if self.productivity_panel.take_dock_request() {
-                self.state.settings.productivity_panel_docked = true;
-                self.state.settings.productivity_panel_visible = false;
-                self.state.settings.outline_enabled = true;
-                self.outline_panel.set_active_tab(crate::ui::OutlinePanelTab::Productivity);
+                self.state.settings.productivity_panel_docked = false;
+                self.state.settings.productivity_panel_visible = true;
                 self.state.mark_settings_dirty();
             }
         }
@@ -2178,31 +1925,11 @@ impl FerriteApp {
                 self.handle_insert_toc();
             }
 
-            // Terminal
-            RibbonAction::ToggleTerminal => {
-                debug!("Ribbon: Toggle Terminal");
-                self.handle_toggle_terminal();
-            }
             RibbonAction::ToggleProductivity => {
                 debug!("Ribbon: Toggle Productivity Hub");
-                if self.state.settings.productivity_panel_docked {
-                    // When docked, toggle the outline panel and switch to Productivity tab
-                    if
-                        self.state.settings.outline_enabled &&
-                        self.outline_panel.active_tab() == crate::ui::OutlinePanelTab::Productivity
-                    {
-                        // Already showing productivity tab - close the panel
-                        self.state.settings.outline_enabled = false;
-                    } else {
-                        // Open outline panel and switch to Productivity tab
-                        self.state.settings.outline_enabled = true;
-                        self.outline_panel.set_active_tab(crate::ui::OutlinePanelTab::Productivity);
-                    }
-                } else {
-                    // When undocked, toggle the floating window
-                    self.state.settings.productivity_panel_visible =
-                        !self.state.settings.productivity_panel_visible;
-                }
+                self.state.settings.productivity_panel_docked = false;
+                self.state.settings.productivity_panel_visible =
+                    !self.state.settings.productivity_panel_visible;
                 self.state.mark_settings_dirty();
             }
         }
@@ -2489,7 +2216,6 @@ impl eframe::App for FerriteApp {
         // Capture and save session state for next startup
         let mut session_state = self.state.capture_session_state();
         session_state.mark_clean_shutdown();
-        self.inject_csv_delimiters(&mut session_state);
 
         if save_session_state(&session_state) {
             info!("Session state saved for next startup");

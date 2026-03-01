@@ -30,28 +30,14 @@ impl FormatToolbar {
         expanded: bool,
         formatting_state: Option<&FormattingState>,
         has_editor: bool,
-        is_dark: bool,
+        _is_dark: bool,
     ) -> FormatToolbarOutput {
         let mut action: Option<RibbonAction> = None;
         let mut toggle_visibility = false;
-
-        let bar_bg = if is_dark {
-            Color32::from_rgb(35, 35, 35)
-        } else {
-            Color32::from_rgb(245, 245, 245)
-        };
-
-        let separator_color = if is_dark {
-            Color32::from_rgb(60, 60, 60)
-        } else {
-            Color32::from_rgb(200, 200, 200)
-        };
-
-        let chevron_color = if is_dark {
-            Color32::from_rgb(140, 140, 140)
-        } else {
-            Color32::from_rgb(120, 120, 120)
-        };
+        let bar_bg = ui.visuals().panel_fill;
+        let separator_color = ui.visuals().widgets.noninteractive.bg_stroke.color;
+        let chevron_color = ui.visuals().widgets.inactive.fg_stroke.color;
+        let hovered_bg = ui.visuals().widgets.hovered.weak_bg_fill;
 
         if expanded {
             // Expanded: full toolbar with format buttons
@@ -83,22 +69,22 @@ impl FormatToolbar {
             let is_link = formatting_state.map(|s| s.is_link).unwrap_or(false);
 
             // Bold
-            if format_button(&mut button_ui, "B", &MarkdownFormatCommand::Bold.tooltip(), has_editor, is_bold, is_dark, true).clicked() {
+            if format_button(&mut button_ui, "B", &MarkdownFormatCommand::Bold.tooltip(), has_editor, is_bold, true).clicked() {
                 action = Some(RibbonAction::Format(MarkdownFormatCommand::Bold));
             }
 
             // Italic
-            if format_button(&mut button_ui, "I", &MarkdownFormatCommand::Italic.tooltip(), has_editor, is_italic, is_dark, false).clicked() {
+            if format_button(&mut button_ui, "I", &MarkdownFormatCommand::Italic.tooltip(), has_editor, is_italic, false).clicked() {
                 action = Some(RibbonAction::Format(MarkdownFormatCommand::Italic));
             }
 
             // Inline code
-            if format_button(&mut button_ui, "<>", &MarkdownFormatCommand::InlineCode.tooltip(), has_editor, is_code, is_dark, false).clicked() {
+            if format_button(&mut button_ui, "<>", &MarkdownFormatCommand::InlineCode.tooltip(), has_editor, is_code, false).clicked() {
                 action = Some(RibbonAction::Format(MarkdownFormatCommand::InlineCode));
             }
 
             // Link
-            if format_button(&mut button_ui, "[~]", &MarkdownFormatCommand::Link.tooltip(), has_editor, is_link, is_dark, false).clicked() {
+            if format_button(&mut button_ui, "[~]", &MarkdownFormatCommand::Link.tooltip(), has_editor, is_link, false).clicked() {
                 action = Some(RibbonAction::Format(MarkdownFormatCommand::Link));
             }
 
@@ -137,23 +123,23 @@ impl FormatToolbar {
             let is_bullet = formatting_state.map(|s| s.is_bullet_list).unwrap_or(false);
             let is_numbered = formatting_state.map(|s| s.is_numbered_list).unwrap_or(false);
 
-            if format_button(&mut button_ui, "−", &MarkdownFormatCommand::BulletList.tooltip(), has_editor, is_bullet, is_dark, false).clicked() {
+            if format_button(&mut button_ui, "−", &MarkdownFormatCommand::BulletList.tooltip(), has_editor, is_bullet, false).clicked() {
                 action = Some(RibbonAction::Format(MarkdownFormatCommand::BulletList));
             }
 
-            if format_button(&mut button_ui, "1.", &MarkdownFormatCommand::NumberedList.tooltip(), has_editor, is_numbered, is_dark, false).clicked() {
+            if format_button(&mut button_ui, "1.", &MarkdownFormatCommand::NumberedList.tooltip(), has_editor, is_numbered, false).clicked() {
                 action = Some(RibbonAction::Format(MarkdownFormatCommand::NumberedList));
             }
 
             // Blockquote
             let is_quote = formatting_state.map(|s| s.is_blockquote).unwrap_or(false);
-            if format_button(&mut button_ui, ">", &MarkdownFormatCommand::Blockquote.tooltip(), has_editor, is_quote, is_dark, false).clicked() {
+            if format_button(&mut button_ui, ">", &MarkdownFormatCommand::Blockquote.tooltip(), has_editor, is_quote, false).clicked() {
                 action = Some(RibbonAction::Format(MarkdownFormatCommand::Blockquote));
             }
 
             // Code block
             let is_code_block = formatting_state.map(|s| s.is_code_block).unwrap_or(false);
-            if format_button(&mut button_ui, "{}", &MarkdownFormatCommand::CodeBlock.tooltip(), has_editor, is_code_block, is_dark, false).clicked() {
+            if format_button(&mut button_ui, "{}", &MarkdownFormatCommand::CodeBlock.tooltip(), has_editor, is_code_block, false).clicked() {
                 action = Some(RibbonAction::Format(MarkdownFormatCommand::CodeBlock));
             }
 
@@ -167,7 +153,6 @@ impl FormatToolbar {
                 "☰",
                 &format!("Insert/Update Table of Contents ({}+Shift+U)", modifier_symbol()),
                 has_editor,
-                is_dark,
             ).clicked() {
                 action = Some(RibbonAction::InsertToc);
             }
@@ -197,11 +182,7 @@ impl FormatToolbar {
 
             // Subtle background
             let bg = if response.hovered() {
-                if is_dark {
-                    Color32::from_rgb(45, 45, 45)
-                } else {
-                    Color32::from_rgb(238, 238, 238)
-                }
+                hovered_bg
             } else {
                 bar_bg
             };
@@ -251,28 +232,16 @@ fn format_button(
     tooltip: &str,
     enabled: bool,
     active: bool,
-    is_dark: bool,
     bold_text: bool,
 ) -> egui::Response {
+    let visuals = ui.visuals();
     let text_color = if enabled {
-        if is_dark { Color32::from_rgb(220, 220, 220) } else { Color32::from_rgb(50, 50, 50) }
-    } else if is_dark {
-        Color32::from_rgb(100, 100, 100)
+        visuals.widgets.inactive.fg_stroke.color
     } else {
-        Color32::from_rgb(160, 160, 160)
+        visuals.widgets.noninteractive.fg_stroke.color
     };
-
-    let active_bg = if is_dark {
-        Color32::from_rgb(70, 90, 120)
-    } else {
-        Color32::from_rgb(200, 220, 240)
-    };
-
-    let hover_bg = if is_dark {
-        Color32::from_rgb(60, 60, 60)
-    } else {
-        Color32::from_rgb(220, 220, 220)
-    };
+    let active_bg = visuals.selection.bg_fill;
+    let hover_bg = visuals.widgets.hovered.weak_bg_fill;
 
     let mut text = RichText::new(icon).size(11.0).color(text_color);
     if bold_text {
@@ -289,15 +258,21 @@ fn format_button(
     if active && enabled {
         ui.painter().rect_filled(btn.rect, egui::Rounding::same(3.0), active_bg);
         let font_id = if bold_text {
-            egui::FontId::new(11.0, egui::FontFamily::Name("Inter-Bold".into()))
+            egui::FontId::new(11.0, egui::FontFamily::Name(crate::fonts::FONT_INTER_BOLD.into()))
         } else {
             egui::FontId::proportional(11.0)
         };
-        ui.painter().text(btn.rect.center(), egui::Align2::CENTER_CENTER, icon, font_id, text_color);
+        ui.painter().text(
+            btn.rect.center(),
+            egui::Align2::CENTER_CENTER,
+            icon,
+            font_id,
+            text_color,
+        );
     } else if btn.hovered() && enabled {
         ui.painter().rect_filled(btn.rect, egui::Rounding::same(3.0), hover_bg);
         let font_id = if bold_text {
-            egui::FontId::new(11.0, egui::FontFamily::Name("Inter-Bold".into()))
+            egui::FontId::new(11.0, egui::FontFamily::Name(crate::fonts::FONT_INTER_BOLD.into()))
         } else {
             egui::FontId::proportional(11.0)
         };
@@ -313,21 +288,14 @@ fn toolbar_icon_button(
     icon: &str,
     tooltip: &str,
     enabled: bool,
-    is_dark: bool,
 ) -> egui::Response {
+    let visuals = ui.visuals();
     let text_color = if enabled {
-        if is_dark { Color32::from_rgb(220, 220, 220) } else { Color32::from_rgb(50, 50, 50) }
-    } else if is_dark {
-        Color32::from_rgb(100, 100, 100)
+        visuals.widgets.inactive.fg_stroke.color
     } else {
-        Color32::from_rgb(160, 160, 160)
+        visuals.widgets.noninteractive.fg_stroke.color
     };
-
-    let hover_bg = if is_dark {
-        Color32::from_rgb(60, 60, 60)
-    } else {
-        Color32::from_rgb(220, 220, 220)
-    };
+    let hover_bg = visuals.widgets.hovered.weak_bg_fill;
 
     let btn = ui.add_enabled(
         enabled,

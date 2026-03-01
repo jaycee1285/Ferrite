@@ -14,7 +14,7 @@ use crate::state::{FileType, PendingAction};
 use crate::ui::{FileOperationResult, GoToLineResult};
 use eframe::egui;
 use log::{debug, warn};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 impl FerriteApp {
 

@@ -22,15 +22,30 @@
 
           linuxBuildInputs = with pkgs; [
             gtk3
+            fontconfig
+            freetype
             libxkbcommon
             wayland
+            wayland-scanner
             vulkan-loader
             libGL
             libx11
+            xorg.libX11
             libxcursor
+            xorg.libXcursor
             libxi
+            xorg.libXi
             libxrandr
+            xorg.libXrandr
             libxcb
+            xorg.libxcb
+            xorg.libXext
+            xorg.libXrender
+            xorg.libXfixes
+            xorg.libXinerama
+            xorg.libXdamage
+            xorg.libXcomposite
+            xorg.libXxf86vm
           ];
 
           darwinFrameworks = with pkgs.darwin.apple_sdk.frameworks; [
@@ -91,9 +106,15 @@
             ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux linuxBuildInputs
             ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin darwinFrameworks;
 
+            LD_LIBRARY_PATH = lib.optionalString pkgs.stdenv.hostPlatform.isLinux
+              (lib.makeLibraryPath linuxBuildInputs);
+
+            PKG_CONFIG_PATH = lib.optionalString pkgs.stdenv.hostPlatform.isLinux
+              "${pkgs.fontconfig.dev}/lib/pkgconfig:${pkgs.freetype.dev}/lib/pkgconfig";
+
             shellHook = ''
               echo "Ferrite Nix dev shell ready."
-              echo "Run cargo commands normally, e.g. cargo build --release"
+              echo "Run cargo commands normally, e.g. cargo run"
             '';
           };
 

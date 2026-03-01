@@ -12,7 +12,7 @@
 use eframe::egui::{self, Color32, Key, LayerId, Order, RichText, Sense};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::path::PathBuf;
 
 /// Maximum number of results to show in the quick switcher.

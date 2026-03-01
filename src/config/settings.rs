@@ -470,7 +470,7 @@ impl ShortcutCommand {
             // Navigation
             NextTab, PrevTab, GoToLine, QuickOpen,
             // View
-            ToggleViewMode, CycleTheme, ToggleZenMode, ToggleOutline, ToggleFileTree, TogglePipeline, ToggleTerminal, ToggleProductivityHub,
+            ToggleViewMode, CycleTheme, ToggleZenMode, ToggleOutline, ToggleFileTree, TogglePipeline, ToggleProductivityHub,
             // Edit
             Undo, Redo, DeleteLine, DuplicateLine, MoveLineUp, MoveLineDown, SelectNextOccurrence,
             // Search
@@ -564,8 +564,7 @@ impl ShortcutCommand {
 
             ShortcutCommand::ToggleViewMode | ShortcutCommand::CycleTheme | ShortcutCommand::ToggleZenMode
             | ShortcutCommand::ToggleFullscreen | ShortcutCommand::ToggleOutline | ShortcutCommand::ToggleFileTree
-            | ShortcutCommand::TogglePipeline | ShortcutCommand::ToggleTerminal
-            | ShortcutCommand::ToggleProductivityHub => "View",
+            | ShortcutCommand::TogglePipeline | ShortcutCommand::ToggleProductivityHub => "View",
 
             ShortcutCommand::Undo | ShortcutCommand::Redo | ShortcutCommand::DeleteLine
             | ShortcutCommand::DuplicateLine | ShortcutCommand::MoveLineUp | ShortcutCommand::MoveLineDown
@@ -583,7 +582,7 @@ impl ShortcutCommand {
             ShortcutCommand::FoldAll | ShortcutCommand::UnfoldAll | ShortcutCommand::ToggleFoldAtCursor => "Folding",
 
             ShortcutCommand::OpenSettings | ShortcutCommand::OpenAbout | ShortcutCommand::ExportHtml
-            | ShortcutCommand::InsertToc => "Other",
+            | ShortcutCommand::InsertToc | ShortcutCommand::ToggleTerminal => "Other",
         }
     }
 
@@ -763,7 +762,7 @@ pub enum Language {
 }
 
 impl Language {
-    /// Get the locale code for rust-i18n (e.g., "en", "zh_Hans").
+    /// Get the locale code for the internal English-only translator shim.
     pub fn locale_code(&self) -> &'static str {
         match self {
             Language::English => "en",
@@ -809,12 +808,7 @@ impl Language {
 
     /// Get all available languages.
     pub fn all() -> &'static [Language] {
-        &[
-            Language::English,
-            Language::ChineseSimplified,
-            Language::German,
-            Language::Japanese,
-        ]
+        &[Language::English]
     }
 
     /// Try to match a system locale code to an available language.
@@ -853,22 +847,9 @@ impl Language {
 
     /// Detect the best language based on system locale.
     ///
-    /// Uses `sys_locale::get_locale()` to detect the system's preferred language,
-    /// then maps it to an available `Language` variant. Falls back to English
-    /// if the system locale is unavailable or not supported.
-    ///
-    /// This should only be called on first run (when no config exists) to avoid
-    /// overriding user preferences.
+    /// This fork is English-only, so first-run language always defaults to English.
     pub fn from_system_locale() -> Language {
-        sys_locale::get_locale()
-            .and_then(|locale| {
-                log::debug!("Detected system locale: {}", locale);
-                Self::from_locale_code(&locale)
-            })
-            .unwrap_or_else(|| {
-                log::debug!("No matching language for system locale, defaulting to English");
-                Language::English
-            })
+        Language::English
     }
 }
 
@@ -1154,10 +1135,10 @@ pub enum Theme {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum EditorFont {
-    /// Inter - Modern, clean UI font (default)
+    /// B612 - Default UI font for this fork
     #[default]
     Inter,
-    /// JetBrains Mono - Monospace font, good for code-heavy documents
+    /// B612 Mono - Monospace font for code-heavy documents
     JetBrainsMono,
     /// Custom system font selected by user
     #[serde(rename = "custom")]
@@ -1168,18 +1149,18 @@ impl EditorFont {
     /// Get the display name for the font.
     pub fn display_name(&self) -> String {
         match self {
-            EditorFont::Inter => "Inter".to_string(),
-            EditorFont::JetBrainsMono => "JetBrains Mono".to_string(),
-            EditorFont::Custom(name) => name.clone(),
+            EditorFont::Inter => "B612".to_string(),
+            EditorFont::JetBrainsMono => "B612 Mono".to_string(),
+            EditorFont::Custom(_) => "B612".to_string(),
         }
     }
 
     /// Get a description of the font.
     pub fn description(&self) -> &'static str {
         match self {
-            EditorFont::Inter => "Modern, clean proportional font",
-            EditorFont::JetBrainsMono => "Monospace font for code",
-            EditorFont::Custom(_) => "Custom system font",
+            EditorFont::Inter => "Default proportional UI font",
+            EditorFont::JetBrainsMono => "Default monospace editor font",
+            EditorFont::Custom(_) => "Legacy custom font setting",
         }
     }
 
@@ -1963,7 +1944,7 @@ impl Default for Settings {
             split_ratio: 0.5,
 
             // Syntax Highlighting
-            syntax_theme: String::from("base16-ocean.dark"),
+            syntax_theme: String::new(),
 
             // Format Toolbar
             format_toolbar_visible: true, // Shown by default
@@ -2279,6 +2260,10 @@ impl Settings {
         self.font_size = self
             .font_size
             .clamp(Self::MIN_FONT_SIZE, Self::MAX_FONT_SIZE);
+
+        if matches!(self.font_family, EditorFont::Custom(_)) {
+            self.font_family = EditorFont::Inter;
+        }
 
         // Clamp tab size
         self.tab_size = self.tab_size.clamp(Self::MIN_TAB_SIZE, Self::MAX_TAB_SIZE);

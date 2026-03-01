@@ -8,14 +8,11 @@ use eframe::egui::{self, TextureHandle};
 use image::GenericImageView;
 use std::sync::Arc;
 
-/// Default icon PNG embedded at compile time (256x256 for good quality)
-/// Falls back gracefully if the icon file doesn't exist during development.
-#[cfg(feature = "bundle-icon")]
+/// Default icon PNG embedded at compile time (256x256 for good quality).
 const EMBEDDED_ICON: &[u8] = include_bytes!("../../assets/icons/icon_256.png");
 
 /// App logo PNG with transparent background embedded at compile time (for title bar)
 /// Using 256px version for good quality when scaled down.
-#[cfg(feature = "bundle-icon")]
 const EMBEDDED_LOGO: &[u8] = include_bytes!("../../assets/icons/icon_1024_transparent.png");
 
 /// Load icon data from PNG bytes.
@@ -72,7 +69,7 @@ pub fn load_icon_from_file(path: &std::path::Path) -> Option<egui::IconData> {
 /// Get the application icon for use in native window options.
 ///
 /// This function attempts to load the application icon in the following order:
-/// 1. Embedded icon (if `bundle-icon` feature is enabled)
+/// 1. Embedded icon
 /// 2. Icon from assets directory (development fallback)
 /// 3. None (graceful degradation)
 ///
@@ -80,8 +77,6 @@ pub fn load_icon_from_file(path: &std::path::Path) -> Option<egui::IconData> {
 ///
 /// An `Arc<egui::IconData>` if an icon could be loaded, otherwise `None`.
 pub fn get_app_icon() -> Option<Arc<egui::IconData>> {
-    // Try embedded icon first (release builds with bundle-icon feature)
-    #[cfg(feature = "bundle-icon")]
     if let Some(icon) = load_icon_from_png(EMBEDDED_ICON) {
         log::info!("Loaded embedded application icon");
         return Some(Arc::new(icon));
@@ -121,13 +116,9 @@ pub fn get_app_icon() -> Option<Arc<egui::IconData>> {
 ///
 /// `Some(TextureHandle)` on success, `None` if the logo couldn't be loaded.
 pub fn load_app_logo_texture(ctx: &egui::Context) -> Option<TextureHandle> {
-    // Try embedded logo first (release builds with bundle-icon feature)
-    #[cfg(feature = "bundle-icon")]
-    {
-        if let Some(texture) = load_texture_from_png(ctx, "app_logo", EMBEDDED_LOGO) {
-            log::info!("Loaded embedded app logo texture");
-            return Some(texture);
-        }
+    if let Some(texture) = load_texture_from_png(ctx, "app_logo", EMBEDDED_LOGO) {
+        log::info!("Loaded embedded app logo texture");
+        return Some(texture);
     }
 
     // Development fallback: try loading from assets directory

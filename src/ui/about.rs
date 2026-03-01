@@ -8,7 +8,7 @@
 
 use crate::app::modifier_symbol;
 use eframe::egui::{self, Color32, RichText, ScrollArea, Ui};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 /// Keyboard shortcut category for organized display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -438,7 +438,7 @@ impl AboutPanel {
                             Color32::from_rgb(0, 102, 204)
                         };
                         ui.label(RichText::new(*name).color(text_color).strong());
-                        ui.label(RichText::new(desc.to_string()).weak());
+                        ui.label(RichText::new((*desc).to_string()).weak());
                         ui.end_row();
                     }
                 });

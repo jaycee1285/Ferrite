@@ -7,7 +7,7 @@ use super::FerriteApp;
 use crate::state::Selection;
 use eframe::egui;
 use log::{debug, warn};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 impl FerriteApp {
 

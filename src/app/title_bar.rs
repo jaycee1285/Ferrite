@@ -10,7 +10,9 @@ use crate::state::FileType;
 use crate::ui::{TitleBarButton, ViewModeSegment, ViewSegmentAction};
 use eframe::egui;
 use log::debug;
-use rust_i18n::t;
+use crate::rust_i18n::t;
+
+const TITLE_BAR_TEXT_SIZE: f32 = 14.0;
 
 impl FerriteApp {
     /// Render the custom title bar panel.
@@ -74,7 +76,7 @@ impl FerriteApp {
                         let logo_size = 18.0; // Match title bar height nicely
                         ui.add(egui::Image::new(texture).fit_to_exact_size(egui::vec2(logo_size, logo_size)));
                     } else {
-                        ui.label(egui::RichText::new("📝").size(14.0));
+                        ui.label(egui::RichText::new("📝").size(TITLE_BAR_TEXT_SIZE));
                     }
 
                     ui.add_space(4.0); // Reduced spacing between icon and title
@@ -82,7 +84,14 @@ impl FerriteApp {
                     // Window title (dynamically generated) - use consistent sizing
                     // Offset text slightly upward to better align with icon center
                     let title = self.window_title();
-                    ui.add(egui::Label::new(egui::RichText::new(title).size(12.0).color(text_color)).selectable(false));
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(title)
+                                .size(TITLE_BAR_TEXT_SIZE)
+                                .color(text_color),
+                        )
+                        .selectable(false),
+                    );
 
                     // Auto-save indicator (after filename) - only show for document tabs
                     if has_editor && !is_special_tab {
@@ -364,7 +373,7 @@ impl FerriteApp {
                         ui.add_space(4.0);
 
                         // View Mode segmented control (all document tabs)
-                        if has_editor && !is_special_tab {
+                        if has_editor && !is_special_tab && !current_file_type.is_tabular() {
                             let segment = ViewModeSegment::new();
 
                             if current_file_type.supports_split() {

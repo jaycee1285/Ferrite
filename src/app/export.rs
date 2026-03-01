@@ -6,7 +6,7 @@ use super::FerriteApp;
 use crate::export::{copy_html_to_clipboard, generate_html_document};
 use eframe::egui;
 use log::{debug, info, warn};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 impl FerriteApp {
     pub(crate) fn handle_export_html(&mut self, ctx: &egui::Context) {

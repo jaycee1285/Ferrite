@@ -5,7 +5,7 @@
 
 use crate::config::{CjkFontPreference, Language, MaxLineWidth, Settings, Theme, ViewMode};
 use eframe::egui::{self, Color32, RichText, Ui};
-use rust_i18n::{set_locale, t};
+use crate::rust_i18n::{set_locale, t};
 
 /// Welcome panel state and rendering.
 #[derive(Debug, Clone, Default)]

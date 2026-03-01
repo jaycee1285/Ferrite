@@ -8,7 +8,7 @@
 #![allow(dead_code)]
 
 use eframe::egui::{self, Color32, Key, RichText, ScrollArea, TextEdit, Ui};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};

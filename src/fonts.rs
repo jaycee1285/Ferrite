@@ -1,12 +1,11 @@
 //! Font management for Ferrite
 //!
-//! This module handles loading custom fonts with proper bold/italic variants.
+//! This module handles loading embedded fonts with proper bold/italic variants.
 //! Fonts are embedded at compile time using `include_bytes!`.
 //!
 //! ## Font Selection Features
 //!
-//! - Built-in fonts: Inter (proportional) and JetBrains Mono (monospace)
-//! - Custom system font selection via font-kit
+//! - Built-in fonts: B612 (proportional) and B612 Mono (monospace)
 //! - CJK regional font preferences for correct glyph variants
 //! - Runtime font reloading without restart
 
@@ -17,26 +16,24 @@
 use egui::{FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 use log::{info, warn};
 use std::collections::BTreeMap;
-use std::sync::OnceLock;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Font Data - Embedded at compile time
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Inter font family (UI/proportional)
-const INTER_REGULAR: &[u8] = include_bytes!("../assets/fonts/Inter-Regular.ttf");
-const INTER_BOLD: &[u8] = include_bytes!("../assets/fonts/Inter-Bold.ttf");
-const INTER_ITALIC: &[u8] = include_bytes!("../assets/fonts/Inter-Italic.ttf");
-const INTER_BOLD_ITALIC: &[u8] = include_bytes!("../assets/fonts/Inter-BoldItalic.ttf");
+// B612 font family (UI/proportional)
+// The repo currently ships only regular-weight files, so bold/italic variants
+// reuse the same embedded font for now.
+const INTER_REGULAR: &[u8] = include_bytes!("../b612.ttf");
+const INTER_BOLD: &[u8] = include_bytes!("../b612.ttf");
+const INTER_ITALIC: &[u8] = include_bytes!("../b612.ttf");
+const INTER_BOLD_ITALIC: &[u8] = include_bytes!("../b612.ttf");
 
-// JetBrains Mono font family (code/monospace)
-const JETBRAINS_REGULAR: &[u8] = include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf");
-const JETBRAINS_BOLD: &[u8] = include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf");
-const JETBRAINS_ITALIC: &[u8] = include_bytes!("../assets/fonts/JetBrainsMono-Italic.ttf");
-const JETBRAINS_BOLD_ITALIC: &[u8] = include_bytes!("../assets/fonts/JetBrainsMono-BoldItalic.ttf");
-
-/// Cache for system font list (expensive to compute, do once)
-static SYSTEM_FONTS_CACHE: OnceLock<Vec<String>> = OnceLock::new();
+// B612 Mono font family (code/monospace)
+const JETBRAINS_REGULAR: &[u8] = include_bytes!("../b612-mono.ttf");
+const JETBRAINS_BOLD: &[u8] = include_bytes!("../b612-mono.ttf");
+const JETBRAINS_ITALIC: &[u8] = include_bytes!("../b612-mono.ttf");
+const JETBRAINS_BOLD_ITALIC: &[u8] = include_bytes!("../b612-mono.ttf");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-Language CJK Font Loading State
@@ -707,142 +704,36 @@ pub fn are_complex_script_fonts_loaded() -> bool {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// System Font Detection
-// ─────────────────────────────────────────────────────────────────────────────
-
-use font_kit::family_name::FamilyName;
-use font_kit::handle::Handle;
-use font_kit::properties::Properties;
-use font_kit::source::SystemSource;
-
-// NanumGothic bundled fallback removed per user request.
-// We strictly rely on system fonts now.
-
-/// Attempt to load a specific system font from a list of candidates.
-///
-/// Returns `Some(FontData)` for the first candidate found on the system.
-fn load_system_font(families: &[&str]) -> Option<FontData> {
-    let source = SystemSource::new();
-
-    for family in families {
-        info!("Attempting to load system font: {}", family);
-        if let Ok(handle) =
-            source.select_best_match(&[FamilyName::Title(family.to_string())], &Properties::new())
-        {
-            match handle {
-                Handle::Path { path, .. } => {
-                    info!("Found system font at: {:?}", path);
-                    // Read file content
-                    if let Ok(bytes) = std::fs::read(&path) {
-                        return Some(FontData::from_owned(bytes));
-                    }
-                }
-                Handle::Memory { bytes, .. } => {
-                    info!("Found system font in memory ({} bytes)", bytes.len());
-                    return Some(FontData::from_owned(bytes.to_vec()));
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Load a specific system font by exact family name.
-///
-/// Returns `Some(FontData)` if the font is found on the system.
-fn load_system_font_by_name(family_name: &str) -> Option<FontData> {
-    let source = SystemSource::new();
-
-    info!("Attempting to load custom font: {}", family_name);
-    if let Ok(handle) = source.select_best_match(
-        &[FamilyName::Title(family_name.to_string())],
-        &Properties::new(),
-    ) {
-        match handle {
-            Handle::Path { path, .. } => {
-                info!("Found custom font at: {:?}", path);
-                if let Ok(bytes) = std::fs::read(&path) {
-                    return Some(FontData::from_owned(bytes));
-                }
-            }
-            Handle::Memory { bytes, .. } => {
-                info!("Found custom font in memory ({} bytes)", bytes.len());
-                return Some(FontData::from_owned(bytes.to_vec()));
-            }
-        }
-    }
-    warn!("Custom font '{}' not found on system", family_name);
-    None
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// System Font Enumeration
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Get a list of all available system font family names.
-///
-/// This function caches the result since font enumeration is expensive.
-/// The list is sorted alphabetically and deduplicated.
-pub fn list_system_fonts() -> &'static [String] {
-    SYSTEM_FONTS_CACHE.get_or_init(|| {
-        let mut families = std::collections::HashSet::new();
-        let source = SystemSource::new();
-
-        info!("Enumerating system fonts...");
-
-        match source.all_families() {
-            Ok(family_names) => {
-                for name in family_names {
-                    // Filter out internal/system fonts that users typically don't want
-                    if !name.starts_with('.')
-                        && !name.starts_with("System")
-                        && !name.contains("LastResort")
-                    {
-                        families.insert(name);
-                    }
-                }
-            }
-            Err(e) => {
-                warn!("Failed to enumerate system fonts: {}", e);
-            }
-        }
-
-        let mut sorted: Vec<String> = families.into_iter().collect();
-        sorted.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-
-        info!("Found {} system font families", sorted.len());
-        sorted
-    })
-}
-
-/// Check if a font family name is available on the system.
-pub fn is_font_available(family_name: &str) -> bool {
-    list_system_fonts()
-        .iter()
-        .any(|f| f.eq_ignore_ascii_case(family_name))
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Font Family Names
 // ─────────────────────────────────────────────────────────────────────────────
+// Optional System Font Support
+// ─────────────────────────────────────────────────────────────────────────────
 
-/// Custom font family for Inter (proportional UI font)
-pub const FONT_INTER: &str = "Inter";
-/// Custom font family for Inter Bold
-pub const FONT_INTER_BOLD: &str = "Inter-Bold";
-/// Custom font family for Inter Italic
-pub const FONT_INTER_ITALIC: &str = "Inter-Italic";
-/// Custom font family for Inter Bold Italic
-pub const FONT_INTER_BOLD_ITALIC: &str = "Inter-BoldItalic";
+/// System font lookup was removed from this fork to keep the font stack
+/// reproducible. CJK and complex-script fallback loaders no-op if no embedded
+/// font covers that script.
+fn load_system_font(_families: &[&str]) -> Option<FontData> {
+    None
+}
 
-/// Custom font family for JetBrains Mono (monospace/code font)
-pub const FONT_JETBRAINS: &str = "JetBrainsMono";
-/// Custom font family for JetBrains Mono Bold
-pub const FONT_JETBRAINS_BOLD: &str = "JetBrainsMono-Bold";
-/// Custom font family for JetBrains Mono Italic
-pub const FONT_JETBRAINS_ITALIC: &str = "JetBrainsMono-Italic";
-/// Custom font family for JetBrains Mono Bold Italic
-pub const FONT_JETBRAINS_BOLD_ITALIC: &str = "JetBrainsMono-BoldItalic";
+// ─────────────────────────────────────────────────────────────────────────────
+/// Custom font family for B612 (proportional UI font)
+pub const FONT_INTER: &str = "B612";
+/// Custom font family for B612 Bold
+pub const FONT_INTER_BOLD: &str = "B612-Bold";
+/// Custom font family for B612 Italic
+pub const FONT_INTER_ITALIC: &str = "B612-Italic";
+/// Custom font family for B612 Bold Italic
+pub const FONT_INTER_BOLD_ITALIC: &str = "B612-BoldItalic";
+
+/// Custom font family for B612 Mono (monospace/code font)
+pub const FONT_JETBRAINS: &str = "B612Mono";
+/// Custom font family for B612 Mono Bold
+pub const FONT_JETBRAINS_BOLD: &str = "B612Mono-Bold";
+/// Custom font family for B612 Mono Italic
+pub const FONT_JETBRAINS_ITALIC: &str = "B612Mono-Italic";
+/// Custom font family for B612 Mono Bold Italic
+pub const FONT_JETBRAINS_BOLD_ITALIC: &str = "B612Mono-BoldItalic";
 
 /// Keys for dynamically loaded CJK system fonts
 const FONT_CJK_KR: &str = "CJK_KR";
@@ -862,9 +753,6 @@ const FONT_ARMENIAN: &str = "Armenian";
 const FONT_ETHIOPIC: &str = "Ethiopic";
 const FONT_OTHER_INDIC: &str = "OtherIndic";
 const FONT_SOUTHEAST_ASIAN: &str = "SoutheastAsian";
-
-/// Key for custom user-selected font
-const FONT_CUSTOM: &str = "Custom";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Font Loading
@@ -1472,7 +1360,7 @@ pub fn create_font_definitions_lazy() -> FontDefinitions {
 /// This function loads only the specific CJK fonts specified in the `CjkLoadSpec`,
 /// enabling memory-efficient font loading based on detected scripts.
 pub fn create_font_definitions_with_cjk_spec(
-    custom_font: Option<&str>,
+    _custom_font: Option<&str>,
     cjk_preference: CjkFontPreference,
     spec: &CjkLoadSpec,
 ) -> FontDefinitions {
@@ -1513,20 +1401,6 @@ pub fn create_font_definitions_with_cjk_spec(
         FontData::from_static(JETBRAINS_BOLD_ITALIC),
     );
 
-    // Load custom font if specified
-    let custom_loaded = if let Some(font_name) = custom_font {
-        if let Some(data) = load_system_font_by_name(font_name) {
-            fonts.font_data.insert(FONT_CUSTOM.to_owned(), data);
-            info!("Loaded custom font: {}", font_name);
-            true
-        } else {
-            warn!("Custom font '{}' not found, falling back to Inter", font_name);
-            false
-        }
-    } else {
-        false
-    };
-
     // Load only the specified CJK fonts
     let cjk_state = load_cjk_fonts_selective(&mut fonts, spec);
 
@@ -1534,15 +1408,7 @@ pub fn create_font_definitions_with_cjk_spec(
     let cs_spec = ComplexScriptLoadSpec::from_loaded_flags();
     let cs_state = load_complex_script_fonts_selective(&mut fonts, &cs_spec);
 
-    // Set up Proportional font family
-    // Order: Custom (if set) -> Inter -> JetBrains Mono (for box-drawing/symbols) -> CJK -> complex scripts
-    if custom_loaded {
-        fonts
-            .families
-            .entry(FontFamily::Proportional)
-            .or_default()
-            .push(FONT_CUSTOM.to_owned());
-    }
+    // Set up Proportional font family.
     fonts
         .families
         .entry(FontFamily::Proportional)
@@ -1586,15 +1452,6 @@ pub fn create_font_definitions_with_cjk_spec(
         .get(&FontFamily::Monospace)
         .cloned()
         .unwrap_or_default();
-
-    // Create custom named font families for explicit style access
-    if custom_loaded {
-        let mut custom_family = vec![FONT_CUSTOM.to_owned()];
-        custom_family.extend(proportional_fallbacks.clone());
-        fonts
-            .families
-            .insert(FontFamily::Name(FONT_CUSTOM.into()), custom_family);
-    }
 
     let mut inter_family = vec![FONT_INTER.to_owned(), FONT_JETBRAINS.to_owned()];
     inter_family.extend(proportional_fallbacks.clone());
@@ -1667,7 +1524,7 @@ pub fn create_font_definitions_with_cjk_spec(
 /// * `cjk_preference` - CJK font preference for regional glyph variants
 /// * `load_cjk` - Whether to load CJK fonts immediately (false for lazy loading)
 pub fn create_font_definitions_with_settings(
-    custom_font: Option<&str>,
+    _custom_font: Option<&str>,
     cjk_preference: CjkFontPreference,
     load_cjk: bool,
 ) -> FontDefinitions {
@@ -1708,20 +1565,6 @@ pub fn create_font_definitions_with_settings(
         FontData::from_static(JETBRAINS_BOLD_ITALIC),
     );
 
-    // Load custom font if specified
-    let custom_loaded = if let Some(font_name) = custom_font {
-        if let Some(data) = load_system_font_by_name(font_name) {
-            fonts.font_data.insert(FONT_CUSTOM.to_owned(), data);
-            info!("Loaded custom font: {}", font_name);
-            true
-        } else {
-            warn!("Custom font '{}' not found, falling back to Inter", font_name);
-            false
-        }
-    } else {
-        false
-    };
-
     // Load CJK fonts only if requested (supports lazy loading)
     let cjk_state = if load_cjk {
         load_cjk_fonts(&mut fonts)
@@ -1734,15 +1577,7 @@ pub fn create_font_definitions_with_settings(
     let cs_spec = ComplexScriptLoadSpec::from_loaded_flags();
     let cs_state = load_complex_script_fonts_selective(&mut fonts, &cs_spec);
 
-    // Set up Proportional font family
-    // Order: Custom (if set) -> Inter -> JetBrains Mono (box-drawing) -> CJK -> complex scripts
-    if custom_loaded {
-        fonts
-            .families
-            .entry(FontFamily::Proportional)
-            .or_default()
-            .push(FONT_CUSTOM.to_owned());
-    }
+    // Set up Proportional font family.
     fonts
         .families
         .entry(FontFamily::Proportional)
@@ -1790,15 +1625,6 @@ pub fn create_font_definitions_with_settings(
     // Create custom named font families for explicit style access
     // These allow us to directly select bold/italic fonts
     // Each family includes fallbacks for CJK character support
-
-    // Custom font family (if loaded)
-    if custom_loaded {
-        let mut custom_family = vec![FONT_CUSTOM.to_owned()];
-        custom_family.extend(proportional_fallbacks.clone());
-        fonts
-            .families
-            .insert(FontFamily::Name(FONT_CUSTOM.into()), custom_family);
-    }
 
     // Inter variants with JetBrains Mono as fallback for missing glyphs (box-drawing, etc.)
     // Inter doesn't include box-drawing characters (U+2500-U+257F), but JetBrains Mono does.
@@ -1858,10 +1684,9 @@ pub fn create_font_definitions_with_settings(
     );
 
     info!(
-        "Loaded fonts: Inter, JetBrains Mono, CJK={} (preference: {:?}), custom: {}",
+        "Loaded fonts: B612, B612 Mono, CJK={} (preference: {:?}), custom fonts disabled",
         if load_cjk { "loaded" } else { "deferred" },
-        cjk_preference,
-        custom_font.unwrap_or("none")
+        cjk_preference
     );
 
     fonts
@@ -2282,10 +2107,6 @@ use crate::config::EditorFont;
 ///
 /// This returns the correct font variant based on bold/italic flags and the
 /// user's selected editor font.
-///
-/// Note: Custom system fonts don't have separate bold/italic variants loaded,
-/// so they use the base custom font for all styles. The OS may synthesize
-/// bold/italic styles, but this depends on the specific font and platform.
 pub fn get_styled_font_family(bold: bool, italic: bool, editor_font: &EditorFont) -> FontFamily {
     match editor_font {
         EditorFont::JetBrainsMono => match (bold, italic) {
@@ -2300,9 +2121,7 @@ pub fn get_styled_font_family(bold: bool, italic: bool, editor_font: &EditorFont
             (false, true) => FontFamily::Name(FONT_INTER_ITALIC.into()),
             (false, false) => FontFamily::Name(FONT_INTER.into()),
         },
-        // Custom fonts don't have separate bold/italic variants
-        // Use the custom font family which has CJK fallbacks
-        EditorFont::Custom(_) => FontFamily::Name(FONT_CUSTOM.into()),
+        EditorFont::Custom(_) => FontFamily::Name(FONT_INTER.into()),
     }
 }
 
@@ -2314,7 +2133,7 @@ pub fn get_base_font_family(editor_font: &EditorFont) -> FontFamily {
         // FontFamily::Proportional has CJK fonts added via add_cjk_fallbacks.
         EditorFont::Inter => FontFamily::Proportional,
         EditorFont::JetBrainsMono => FontFamily::Monospace,
-        EditorFont::Custom(_) => FontFamily::Name(FONT_CUSTOM.into()),
+        EditorFont::Custom(_) => FontFamily::Proportional,
     }
 }
 
@@ -2393,15 +2212,15 @@ mod tests {
 
     #[test]
     fn test_get_styled_font_family_custom() {
-        // Custom font always returns FONT_CUSTOM
+        // Legacy custom fonts fall back to the embedded proportional family.
         let custom = EditorFont::Custom("Test Font".to_string());
         assert_eq!(
             get_styled_font_family(false, false, &custom),
-            FontFamily::Name(FONT_CUSTOM.into())
+            FontFamily::Name(FONT_INTER.into())
         );
         assert_eq!(
             get_styled_font_family(true, true, &custom),
-            FontFamily::Name(FONT_CUSTOM.into())
+            FontFamily::Name(FONT_INTER.into())
         );
     }
 

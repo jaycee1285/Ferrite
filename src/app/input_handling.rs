@@ -20,11 +20,6 @@ impl FerriteApp {
     /// By consuming these keys before the TextEdit is rendered, we ensure only
     /// our undo system handles the events.
     pub(crate) fn consume_undo_redo_keys(&mut self, ctx: &egui::Context) {
-        // Skip if terminal has focus - let terminal handle all keyboard input
-        if self.terminal_panel_state.terminal_has_focus {
-            return;
-        }
-
         let consumed_action: Option<bool> = ctx.input_mut(|i| {
             // Cmd+Shift+Z (macOS) / Ctrl+Shift+Z (Win/Linux): Redo (check first since it's more specific)
             if i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z) {
@@ -60,16 +55,7 @@ impl FerriteApp {
     /// document. This happens because eframe generates Event::Cut events which
     /// TextEdit processes. We filter out these events when there's no selection.
     ///
-    /// Skips handling when the terminal has focus so the terminal widget can
-    /// process clipboard shortcuts directly.
     pub(crate) fn filter_cut_event_if_no_selection(&mut self, ctx: &egui::Context) {
-        // Skip editor cut/copy/paste handling when terminal has focus
-        if self.terminal_panel_state.terminal_has_focus
-            && self.terminal_panel_state.renaming_index.is_none()
-        {
-            return;
-        }
-
         // Check if there's a selection in the active tab
         let has_selection = self.state.active_tab()
             .map(|tab| tab.cursors.primary().is_selection())
@@ -91,11 +77,6 @@ impl FerriteApp {
     /// This must be called before the editor widget is rendered.
     /// Returns the direction to move (-1 for up, 1 for down) if a move was requested.
     pub(crate) fn consume_move_line_keys(&mut self, ctx: &egui::Context) -> Option<isize> {
-        // Skip if terminal has focus - let terminal handle its own input
-        if self.terminal_panel_state.terminal_has_focus {
-            return None;
-        }
-
         ctx.input_mut(|i| {
             // Alt+Up: Move line up
             if i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowUp) {
@@ -194,12 +175,6 @@ impl FerriteApp {
     /// Returns true if a paste event was consumed and handled with smart behavior.
     pub(crate) fn consume_smart_paste(&mut self, ctx: &egui::Context) -> bool {
         use crate::editor::get_ferrite_editor_mut;
-
-        if self.terminal_panel_state.terminal_has_focus
-            && self.terminal_panel_state.renaming_index.is_none()
-        {
-            return false;
-        }
 
         let Some(tab) = self.state.active_tab() else {
             return false;
@@ -388,11 +363,6 @@ impl FerriteApp {
     ///
     /// Returns true if an event was consumed and handled.
     pub(crate) fn handle_auto_close_pre_render(&mut self, ctx: &egui::Context) -> bool {
-        // Skip if terminal has focus - let terminal handle its own input
-        if self.terminal_panel_state.terminal_has_focus {
-            return false;
-        }
-
         if !self.state.settings.auto_close_brackets {
             return false;
         }

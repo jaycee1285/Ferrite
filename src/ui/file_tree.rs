@@ -11,7 +11,7 @@
 use crate::vcs::GitFileStatus;
 use crate::workspaces::{FileTreeNode, FileTreeNodeKind};
 use eframe::egui::{self, Color32, RichText, Sense, Ui, Vec2};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -29,6 +29,9 @@ const INDENT_PER_LEVEL: f32 = 16.0;
 
 /// Height of each tree item row.
 const ROW_HEIGHT: f32 = 22.0;
+const FILE_TREE_TEXT_SIZE: f32 = 14.0;
+const FILE_TREE_ICON_SIZE: f32 = 16.0;
+const FILE_TREE_ARROW_SIZE: f32 = 12.0;
 
 /// Output from the file tree panel.
 #[derive(Debug, Default)]
@@ -121,29 +124,15 @@ impl FileTreePanel {
         ctx: &egui::Context,
         file_tree: &FileTreeNode,
         workspace_name: &str,
-        is_dark: bool,
+        _is_dark: bool,
         git_statuses: Option<&HashMap<PathBuf, GitFileStatus>>,
     ) -> FileTreeOutput {
         let mut output = FileTreeOutput::default();
+        let visuals = ctx.style().visuals.clone();
 
-        // Panel colors
-        let panel_bg = if is_dark {
-            Color32::from_rgb(30, 30, 30)
-        } else {
-            Color32::from_rgb(245, 245, 245)
-        };
-
-        let border_color = if is_dark {
-            Color32::from_rgb(60, 60, 60)
-        } else {
-            Color32::from_rgb(200, 200, 200)
-        };
-
-        let _header_bg = if is_dark {
-            Color32::from_rgb(40, 40, 40)
-        } else {
-            Color32::from_rgb(235, 235, 235)
-        };
+        let panel_bg = visuals.panel_fill;
+        let border_color = visuals.widgets.noninteractive.bg_stroke.color;
+        let header_text = visuals.override_text_color.unwrap_or(visuals.text_color());
 
         egui::SidePanel::left("file_tree_panel")
             .resizable(true)
@@ -172,7 +161,12 @@ impl FileTreePanel {
                     // Workspace name (truncated if needed)
                     let _name_width = ui.available_width() - 30.0;
                     ui.add(
-                        egui::Label::new(RichText::new(workspace_name).size(12.0).strong())
+                        egui::Label::new(
+                            RichText::new(workspace_name)
+                                .size(FILE_TREE_TEXT_SIZE)
+                                .strong()
+                                .color(header_text),
+                        )
                             .truncate(),
                     );
 
@@ -198,7 +192,7 @@ impl FileTreePanel {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         ui.add_space(4.0);
-                        self.render_tree_node(ui, file_tree, 0, is_dark, &mut output, git_statuses);
+                        self.render_tree_node(ui, file_tree, 0, &mut output, git_statuses);
                         ui.add_space(4.0);
                     });
             });
@@ -212,30 +206,17 @@ impl FileTreePanel {
         ui: &mut Ui,
         node: &FileTreeNode,
         depth: usize,
-        is_dark: bool,
         output: &mut FileTreeOutput,
         git_statuses: Option<&HashMap<PathBuf, GitFileStatus>>,
     ) {
         let indent = depth as f32 * INDENT_PER_LEVEL;
+        let visuals = ui.visuals().clone();
+        let is_dark = visuals.dark_mode;
 
-        // Colors
-        let text_color = if is_dark {
-            Color32::from_rgb(220, 220, 220)
-        } else {
-            Color32::from_rgb(40, 40, 40)
-        };
-
-        let hover_bg = if is_dark {
-            Color32::from_rgb(50, 50, 60)
-        } else {
-            Color32::from_rgb(220, 225, 235)
-        };
-
-        let _selected_bg = if is_dark {
-            Color32::from_rgb(45, 55, 75)
-        } else {
-            Color32::from_rgb(200, 210, 230)
-        };
+        let text_color = visuals.override_text_color.unwrap_or(visuals.text_color());
+        let hover_bg = visuals.widgets.hovered.weak_bg_fill;
+        let selected_bg = visuals.selection.bg_fill;
+        let selected_fg = visuals.selection.stroke.color;
 
         // Determine if this is a directory (loaded or not)
         let is_dir = matches!(
@@ -266,14 +247,19 @@ impl FileTreePanel {
         let (row_rect, row_response) =
             ui.allocate_exact_size(Vec2::new(row_width, row_height), Sense::click());
 
-        // Paint hover background FIRST (before text)
-        if row_response.hovered() {
+        let is_selected = row_response.has_focus();
+
+        if is_selected {
+            ui.painter().rect_filled(row_rect, 2.0, selected_bg);
+        } else if row_response.hovered() {
             ui.painter().rect_filled(row_rect, 2.0, hover_bg);
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
 
         // Now render the row content on top of the background
         let mut content_pos = row_rect.left_top() + Vec2::new(indent + 4.0, 2.0);
+
+        let row_text_color = if is_selected { selected_fg } else { text_color };
 
         // Expand/collapse arrow for directories
         if is_dir {
@@ -282,8 +268,8 @@ impl FileTreePanel {
                 content_pos + Vec2::new(0.0, 0.0),
                 egui::Align2::LEFT_TOP,
                 arrow,
-                egui::FontId::proportional(10.0),
-                text_color,
+                egui::FontId::proportional(FILE_TREE_ARROW_SIZE),
+                row_text_color,
             );
         }
         content_pos.x += 14.0; // Space for arrow
@@ -294,18 +280,22 @@ impl FileTreePanel {
             content_pos,
             egui::Align2::LEFT_TOP,
             icon,
-            egui::FontId::proportional(14.0),
-            text_color,
+            egui::FontId::proportional(FILE_TREE_ICON_SIZE),
+            row_text_color,
         );
         content_pos.x += 18.0; // Space for icon
 
         // Name - color based on Git status
-        let name_color = Self::get_status_color(git_status, text_color, is_dark);
+        let name_color = if is_selected {
+            row_text_color
+        } else {
+            Self::get_status_color(git_status, text_color, is_dark)
+        };
         ui.painter().text(
             content_pos,
             egui::Align2::LEFT_TOP,
             &node.name,
-            egui::FontId::proportional(12.0),
+            egui::FontId::proportional(FILE_TREE_TEXT_SIZE),
             name_color,
         );
 
@@ -313,8 +303,8 @@ impl FileTreePanel {
         let name_galley = ui.fonts(|f| {
             f.layout_no_wrap(
                 node.name.clone(),
-                egui::FontId::proportional(12.0),
-                text_color,
+                egui::FontId::proportional(FILE_TREE_TEXT_SIZE),
+                row_text_color,
             )
         });
         content_pos.x += name_galley.size().x + 4.0;
@@ -363,7 +353,7 @@ impl FileTreePanel {
         if let FileTreeNodeKind::Directory { children } = &node.kind {
             if node.is_expanded {
                 for child in children {
-                    self.render_tree_node(ui, child, depth + 1, is_dark, output, git_statuses);
+                    self.render_tree_node(ui, child, depth + 1, output, git_statuses);
                 }
             }
         }

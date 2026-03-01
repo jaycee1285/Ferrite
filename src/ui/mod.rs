@@ -17,7 +17,6 @@ mod quick_switcher;
 mod ribbon;
 mod search;
 mod settings;
-mod terminal_panel;
 mod view_segment;
 mod window;
 
@@ -36,7 +35,6 @@ pub use quick_switcher::QuickSwitcher;
 pub use ribbon::{ Ribbon, RibbonAction };
 pub use search::{ SearchNavigationTarget, SearchPanel };
 pub use settings::SettingsPanel;
-pub use terminal_panel::{ TerminalPanel, TerminalPanelState, FloatingWindow };
 pub use view_segment::{ TitleBarButton, ViewModeSegment, ViewSegmentAction };
 pub use window::{
     center_panel_in_viewport,

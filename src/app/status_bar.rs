@@ -1,29 +1,27 @@
 //! Status bar rendering for the Ferrite application.
 //!
 //! This module renders the bottom status bar with file path, encoding selector,
-//! line/column info, word count, CSV controls, and toast messages.
+//! line/column info, word count, and toast messages.
 
 use super::FerriteApp;
 use super::helpers::modifier_symbol;
 use crate::config::{Theme, ViewMode};
-use crate::markdown::{delimiter_display_name, delimiter_symbol, get_structured_file_type, get_tabular_file_type, DELIMITERS};
 use crate::editor::TextStats;
 use crate::state::FileType;
 use crate::theme::ThemeColors;
 use eframe::egui;
 use log::{debug, warn};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 impl FerriteApp {
     /// Render the bottom status bar panel.
     ///
-    /// Returns (toggle_rainbow_columns, pending_encoding_change).
+    /// Returns (reserved_flag, pending_encoding_change).
     pub(crate) fn render_status_bar(
         &mut self,
         ctx: &egui::Context,
         is_dark: bool,
     ) -> (bool, Option<&'static str>) {
-        let mut toggle_rainbow_columns = false;
         let mut pending_encoding_change: Option<&'static str> = None;
 
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
@@ -389,164 +387,6 @@ impl FerriteApp {
                         let (line, col) = tab.cursor_position;
                         ui.label(format!("Ln {}, Col {}", line + 1, col + 1));
 
-                        // Delimiter picker for CSV/TSV files in rendered or split mode
-                        if tab.view_mode == ViewMode::Rendered || tab.view_mode == ViewMode::Split {
-                            if let Some(tabular_type) = tab.path.as_ref().and_then(|p| get_tabular_file_type(p)) {
-                                ui.separator();
-                                
-                                let tab_id = tab.id;
-                                
-                                // Capture all state values upfront to avoid borrow conflicts with popups
-                                let (current_delimiter, is_overridden, has_headers, header_overridden) = {
-                                    let csv_state = self.csv_viewer_states.entry(tab_id).or_default();
-                                    (
-                                        csv_state.effective_delimiter().unwrap_or(tabular_type.delimiter()),
-                                        csv_state.has_delimiter_override(),
-                                        csv_state.has_headers(),
-                                        csv_state.has_header_override(),
-                                    )
-                                };
-                                
-                                // Delimiter indicator with dropdown
-                                let delimiter_label = format!(
-                                    "Delim: {}{}",
-                                    delimiter_symbol(current_delimiter),
-                                    if is_overridden { " ✔" } else { "" }
-                                );
-                                
-                                let popup_id = ui.make_persistent_id("delimiter_picker_popup");
-                                let button_response = ui.add(
-                                    egui::Button::new(&delimiter_label)
-                                        .frame(false)
-                                        .sense(egui::Sense::click())
-                                );
-                                
-                                button_response.clone().on_hover_text(format!(
-                                    "Delimiter: {}\n{}Click to change",
-                                    delimiter_display_name(current_delimiter),
-                                    if is_overridden { "Manually set. " } else { "Auto-detected. " }
-                                ));
-                                
-                                if button_response.clicked() {
-                                    ui.memory_mut(|mem| mem.toggle_popup(popup_id));
-                                }
-                                
-                                // Delimiter picker popup
-                                egui::popup_below_widget(ui, popup_id, &button_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                                    ui.set_min_width(120.0);
-                                    ui.label(egui::RichText::new(t!("csv.select_delimiter").to_string()).strong());
-                                    ui.separator();
-                                    
-                                    // Auto-detect option
-                                    let auto_selected = !is_overridden;
-                                    if ui.selectable_label(auto_selected, t!("csv.delimiter_auto").to_string()).clicked() {
-                                        if let Some(state) = self.csv_viewer_states.get_mut(&tab_id) {
-                                            state.clear_delimiter_override();
-                                        }
-                                        ui.memory_mut(|mem| mem.close_popup());
-                                    }
-                                    
-                                    ui.separator();
-                                    
-                                    // Manual delimiter options
-                                    for &delim in DELIMITERS {
-                                        let selected = is_overridden && current_delimiter == delim;
-                                        let label = format!("{} {}", delimiter_symbol(delim), delimiter_display_name(delim));
-                                        if ui.selectable_label(selected, label).clicked() {
-                                            if let Some(state) = self.csv_viewer_states.get_mut(&tab_id) {
-                                                state.set_delimiter(delim);
-                                            }
-                                            ui.memory_mut(|mem| mem.close_popup());
-                                        }
-                                    }
-                                });
-                                
-                                ui.separator();
-                                
-                                // Header row toggle
-                                let header_label = format!(
-                                    "Headers: {}{}",
-                                    if has_headers { "✔" } else { "✗" },
-                                    if header_overridden { " ✔" } else { "" }
-                                );
-                                
-                                let header_popup_id = ui.make_persistent_id("header_picker_popup");
-                                let header_button_response = ui.add(
-                                    egui::Button::new(&header_label)
-                                        .frame(false)
-                                        .sense(egui::Sense::click())
-                                );
-                                
-                                header_button_response.clone().on_hover_text(format!(
-                                    "First row as headers: {}\n{}Click to change",
-                                    if has_headers { "Yes" } else { "No" },
-                                    if header_overridden { "Manually set. " } else { "Auto-detected. " }
-                                ));
-                                
-                                if header_button_response.clicked() {
-                                    ui.memory_mut(|mem| mem.toggle_popup(header_popup_id));
-                                }
-                                
-                                // Header picker popup
-                                egui::popup_below_widget(ui, header_popup_id, &header_button_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                                    ui.set_min_width(120.0);
-                                    ui.label(egui::RichText::new(t!("csv.header_row").to_string()).strong());
-                                    ui.separator();
-                                    
-                                    // Auto-detect option
-                                    let auto_selected = !header_overridden;
-                                    if ui.selectable_label(auto_selected, t!("csv.delimiter_auto").to_string()).clicked() {
-                                        if let Some(state) = self.csv_viewer_states.get_mut(&tab_id) {
-                                            state.clear_header_override();
-                                        }
-                                        ui.memory_mut(|mem| mem.close_popup());
-                                    }
-                                    
-                                    ui.separator();
-                                    
-                                    // Manual options
-                                    if ui.selectable_label(header_overridden && has_headers, t!("csv.has_headers_yes").to_string()).clicked() {
-                                        if let Some(state) = self.csv_viewer_states.get_mut(&tab_id) {
-                                            state.set_header_override(true);
-                                        }
-                                        ui.memory_mut(|mem| mem.close_popup());
-                                    }
-                                    
-                                    if ui.selectable_label(header_overridden && !has_headers, t!("csv.has_headers_no").to_string()).clicked() {
-                                        if let Some(state) = self.csv_viewer_states.get_mut(&tab_id) {
-                                            state.set_header_override(false);
-                                        }
-                                        ui.memory_mut(|mem| mem.close_popup());
-                                    }
-                                });
-
-                                ui.separator();
-
-                                // Rainbow columns toggle
-                                // (capture values and defer mutation to avoid borrow conflict)
-                                let rainbow_enabled = self.state.settings.csv_rainbow_columns;
-                                let rainbow_label = format!(
-                                    "Colors: {}",
-                                    if rainbow_enabled { "🌈" } else { "○" }
-                                );
-
-                                let rainbow_button_response = ui.add(
-                                    egui::Button::new(&rainbow_label)
-                                        .frame(false)
-                                        .sense(egui::Sense::click())
-                                );
-
-                                rainbow_button_response.clone().on_hover_text(format!(
-                                    "Rainbow column coloring: {}\nClick to toggle",
-                                    if rainbow_enabled { "On" } else { "Off" }
-                                ));
-
-                                if rainbow_button_response.clicked() {
-                                    toggle_rainbow_columns = true;
-                                }
-                            }
-                        }
-
                         ui.separator();
 
                         // Encoding display and picker
@@ -609,6 +449,6 @@ impl FerriteApp {
             }
         }
 
-        (toggle_rainbow_columns, pending_encoding_change)
+        (false, pending_encoding_change)
     }
 }

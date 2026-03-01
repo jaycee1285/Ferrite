@@ -18,7 +18,7 @@
 use crate::string_utils::floor_char_boundary;
 use crate::ui::{center_panel_in_viewport, search_panel_constraints, PanelConstraints};
 use eframe::egui::{self, Color32, Key, Pos2, Rect, RichText, ScrollArea, Sense, TextFormat, Vec2};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::path::PathBuf;
 
 /// Maximum number of results to show per file.
@@ -26,6 +26,9 @@ const MAX_RESULTS_PER_FILE: usize = 10;
 
 /// Maximum number of files to show results for.
 const MAX_FILES_WITH_RESULTS: usize = 50;
+
+const DAYLIGHT_INDEX_DIRS: [&str; 2] = [".daylight", ".DayLight"];
+const DAYLIGHT_INDEX_FILE: &str = "search-index.json";
 
 /// A single search match result.
 #[derive(Debug, Clone)]
@@ -111,6 +114,21 @@ pub struct SearchPanel {
     last_viewport_size: Vec2,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+struct IndexedSearchDoc {
+    path: String,
+    name: String,
+    title: String,
+    body: String,
+    #[serde(default, rename = "searchText")]
+    search_text: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PersistedSearchIndex {
+    docs: Vec<IndexedSearchDoc>,
+}
+
 impl Default for SearchPanel {
     fn default() -> Self {
         Self::new()
@@ -179,14 +197,19 @@ impl SearchPanel {
         }
     }
 
-    /// Perform search across workspace files.
-    pub fn search(&mut self, files: &[PathBuf], hidden_patterns: &[String]) {
+    /// Perform search across workspace files using a persisted DayLight-style JSON index
+    /// when available, falling back to direct file scanning otherwise.
+    pub fn search(&mut self, workspace_root: &PathBuf, files: &[PathBuf], hidden_patterns: &[String]) {
         self.results.clear();
         self.total_matches = 0;
         self.error_message = None;
         self.last_query = self.query.clone();
 
         if self.query.is_empty() {
+            return;
+        }
+
+        if self.search_indexed(workspace_root) {
             return;
         }
 
@@ -336,6 +359,68 @@ impl SearchPanel {
                 break;
             }
         }
+    }
+
+    fn search_indexed(&mut self, workspace_root: &PathBuf) -> bool {
+        let index = match load_persisted_index(workspace_root) {
+            Ok(Some(index)) => index,
+            Ok(None) => return false,
+            Err(err) => {
+                self.error_message = Some(format!("Failed to load search index: {err}"));
+                return true;
+            }
+        };
+
+        let query = self.query.trim().to_lowercase();
+        if query.is_empty() {
+            return true;
+        }
+
+        let terms: Vec<&str> = query.split_whitespace().filter(|term| !term.is_empty()).collect();
+        if terms.is_empty() {
+            return true;
+        }
+
+        let mut ranked: Vec<(i64, FileSearchResults)> = Vec::new();
+
+        for doc in index.docs {
+            let haystack = searchable_text(&doc);
+            if !terms.iter().all(|term| haystack.contains(term)) {
+                continue;
+            }
+
+            let snippet = make_indexed_snippet(&doc.body, &query, &terms);
+            let full_path = workspace_root.join(&doc.path);
+            let file_results = FileSearchResults {
+                path: full_path,
+                matches: vec![SearchMatch {
+                    line_number: 1,
+                    line_content: snippet,
+                    match_start: 0,
+                    match_end: 0,
+                    char_offset: 0,
+                    match_len: 0,
+                }],
+                truncated: false,
+                expanded: true,
+            };
+
+            ranked.push((score_indexed_doc(&doc, &query, &terms), file_results));
+        }
+
+        ranked.sort_by(|left, right| {
+            right
+                .0
+                .cmp(&left.0)
+                .then_with(|| left.1.path.cmp(&right.1.path))
+        });
+
+        for (_, result) in ranked.into_iter().take(MAX_FILES_WITH_RESULTS) {
+            self.total_matches += result.matches.len();
+            self.results.push(result);
+        }
+
+        true
     }
 
     /// Show the search panel with viewport constraints.
@@ -702,6 +787,102 @@ impl SearchPanel {
 
         output
     }
+}
+
+fn load_persisted_index(workspace_root: &PathBuf) -> Result<Option<PersistedSearchIndex>, String> {
+    for dir_name in DAYLIGHT_INDEX_DIRS {
+        let index_path = workspace_root.join(dir_name).join(DAYLIGHT_INDEX_FILE);
+        if !index_path.exists() {
+            continue;
+        }
+
+        let raw = std::fs::read_to_string(&index_path)
+            .map_err(|err| format!("{}: {}", index_path.display(), err))?;
+        let parsed = serde_json::from_str::<PersistedSearchIndex>(&raw)
+            .map_err(|err| format!("{}: {}", index_path.display(), err))?;
+        return Ok(Some(parsed));
+    }
+
+    Ok(None)
+}
+
+fn searchable_text(doc: &IndexedSearchDoc) -> String {
+    let search_text = if doc.search_text.is_empty() {
+        format!("{}\n{}\n{}\n{}", doc.path, doc.name, doc.title, doc.body)
+    } else {
+        doc.search_text.clone()
+    };
+    search_text.to_lowercase()
+}
+
+fn score_indexed_doc(doc: &IndexedSearchDoc, query: &str, terms: &[&str]) -> i64 {
+    let path = doc.path.to_lowercase();
+    let name = doc.name.to_lowercase();
+    let title = doc.title.to_lowercase();
+    let body = doc.body.to_lowercase();
+    let mut score = 0i64;
+
+    if title == query {
+        score += 320;
+    }
+    if title.starts_with(query) {
+        score += 180;
+    }
+    if title.contains(query) {
+        score += 90;
+    }
+
+    if name == query {
+        score += 220;
+    }
+    if name.starts_with(query) {
+        score += 120;
+    }
+    if path.starts_with(query) {
+        score += 75;
+    }
+    if body.contains(query) {
+        score += 40;
+    }
+
+    for term in terms {
+        if title.contains(term) {
+            score += 25;
+        }
+        if name.contains(term) {
+            score += 20;
+        }
+        if path.contains(term) {
+            score += 14;
+        }
+        if body.contains(term) {
+            score += 6;
+        }
+    }
+
+    score
+}
+
+fn make_indexed_snippet(body: &str, query: &str, terms: &[&str]) -> String {
+    let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        return String::new();
+    }
+
+    let lower = normalized.to_lowercase();
+    let anchor = lower
+        .find(query)
+        .or_else(|| terms.iter().find_map(|term| lower.find(term)))
+        .unwrap_or(0);
+
+    let start = floor_char_boundary(&normalized, anchor.saturating_sub(48));
+    let end = floor_char_boundary(
+        &normalized,
+        (anchor + query.len().max(24) + 96).min(normalized.len()),
+    );
+    let prefix = if start > 0 { "..." } else { "" };
+    let suffix = if end < normalized.len() { "..." } else { "" };
+    format!("{}{}{}", prefix, &normalized[start..end].trim(), suffix)
 }
 
 #[cfg(test)]

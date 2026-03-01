@@ -4,7 +4,7 @@
 //! for opening and saving files, and for opening workspace folders.
 
 use rfd::FileDialog;
-use rust_i18n::t;
+use crate::rust_i18n::t;
 use std::path::PathBuf;
 
 /// File extension filters for supported file types.

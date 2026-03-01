@@ -23,6 +23,7 @@
 
 use eframe::egui::{Color32, FontId, RichText};
 use log::{debug, trace, warn};
+use std::io::{BufReader, Cursor};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -34,14 +35,14 @@ use syntect::util::LinesWithEndings;
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Default dark theme name from syntect's built-in themes
-pub const DEFAULT_DARK_THEME: &str = "base16-ocean.dark";
+/// Default dark theme name.
+pub const DEFAULT_DARK_THEME: &str = "ayu-mirage";
 
-/// Default light theme name from syntect's built-in themes
-pub const DEFAULT_LIGHT_THEME: &str = "InspiredGitHub";
+/// Default light theme name.
+pub const DEFAULT_LIGHT_THEME: &str = "ayu-light";
 
 /// Fallback theme if the specified theme is not found
-pub const FALLBACK_THEME: &str = "base16-ocean.dark";
+pub const FALLBACK_THEME: &str = "ayu-mirage";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Highlighted Segment
@@ -156,7 +157,9 @@ impl SyntaxHighlighter {
         let syntax_set = two_face::syntax::extra_newlines();
         // Use two-face's extended theme set which includes Dracula, Nord, Catppuccin, etc.
         // Convert to syntect's ThemeSet for compatibility
-        let theme_set: ThemeSet = two_face::theme::extra().into();
+        let mut theme_set: ThemeSet = two_face::theme::extra().into();
+        inject_embedded_theme(&mut theme_set, "ayu-light");
+        inject_embedded_theme(&mut theme_set, "ayu-mirage");
         debug!(
             "Loaded {} syntaxes and {} themes",
             syntax_set.syntaxes().len(),
@@ -398,6 +401,40 @@ impl SyntaxHighlighter {
     pub fn get_theme_foreground(&self, theme: &Theme) -> Option<Color32> {
         theme.settings.foreground.map(syntect_to_egui_color)
     }
+}
+
+fn inject_embedded_theme(theme_set: &mut ThemeSet, name: &str) {
+    match load_embedded_theme(name) {
+        Ok(theme) => {
+            theme_set.themes.insert(name.to_string(), theme);
+        }
+        Err(err) => {
+            warn!("Failed to load embedded syntax theme '{name}': {err}");
+        }
+    }
+}
+
+fn load_embedded_theme(name: &str) -> std::io::Result<Theme> {
+    let theme_bytes: &[u8] = match name {
+        "ayu-light" => include_bytes!(
+            "/home/john/repos/r3bl-open-core/tui/src/tui/syntax_highlighting/assets/ayu-light.tmTheme"
+        ),
+        "ayu-mirage" => include_bytes!(
+            "/home/john/repos/r3bl-open-core/tui/src/tui/syntax_highlighting/assets/ayu-mirage.tmTheme"
+        ),
+        other => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Unknown embedded theme: {other}"),
+            ));
+        }
+    };
+
+    let cursor = Cursor::new(theme_bytes);
+    let mut buf_reader = BufReader::new(cursor);
+    ThemeSet::load_from_reader(&mut buf_reader).map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to load theme")
+    })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

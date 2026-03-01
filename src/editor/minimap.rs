@@ -784,7 +784,7 @@ impl<'a> SemanticMinimap<'a> {
 
                     // Use bold for H1 headings, regular for others
                     let font = if matches!(item.content_type, ContentType::Heading(1)) {
-                        FontId::new(font_size, egui::FontFamily::Name("Inter-Bold".into()))
+                        FontId::new(font_size, egui::FontFamily::Name(crate::fonts::FONT_INTER_BOLD.into()))
                     } else {
                         FontId::proportional(font_size)
                     };

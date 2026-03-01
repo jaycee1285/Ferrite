@@ -10,7 +10,7 @@ use crate::markdown::{apply_raw_format, insert_or_update_toc, MarkdownFormatComm
 use crate::state::{FileType, PendingAction};
 use eframe::egui;
 use log::{debug, info, warn};
-use rust_i18n::t;
+use crate::rust_i18n::t;
 
 impl FerriteApp {
 
