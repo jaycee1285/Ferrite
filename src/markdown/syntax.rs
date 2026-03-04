@@ -23,7 +23,9 @@
 
 use eframe::egui::{Color32, FontId, RichText};
 use log::{debug, trace, warn};
+use std::fs::File;
 use std::io::{BufReader, Cursor};
+use std::path::{Path, PathBuf};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -40,6 +42,9 @@ pub const DEFAULT_DARK_THEME: &str = "ayu-mirage";
 
 /// Default light theme name.
 pub const DEFAULT_LIGHT_THEME: &str = "ayu-light";
+
+/// Name used for the user-provided syntect theme loaded from disk.
+pub const CURRENT_THEME: &str = "current.tmTheme";
 
 /// Fallback theme if the specified theme is not found
 pub const FALLBACK_THEME: &str = "ayu-mirage";
@@ -158,6 +163,7 @@ impl SyntaxHighlighter {
         // Use two-face's extended theme set which includes Dracula, Nord, Catppuccin, etc.
         // Convert to syntect's ThemeSet for compatibility
         let mut theme_set: ThemeSet = two_face::theme::extra().into();
+        inject_current_theme(&mut theme_set);
         inject_embedded_theme(&mut theme_set, "ayu-light");
         inject_embedded_theme(&mut theme_set, "ayu-mirage");
         debug!(
@@ -215,6 +221,10 @@ impl SyntaxHighlighter {
 
     /// Get the appropriate theme for dark or light mode.
     pub fn get_theme_for_mode(&self, dark_mode: bool) -> &Theme {
+        if self.theme_set.themes.contains_key(CURRENT_THEME) {
+            return self.get_theme(CURRENT_THEME);
+        }
+
         let theme_name = if dark_mode {
             DEFAULT_DARK_THEME
         } else {
@@ -414,6 +424,29 @@ fn inject_embedded_theme(theme_set: &mut ThemeSet, name: &str) {
     }
 }
 
+fn inject_current_theme(theme_set: &mut ThemeSet) {
+    let Some(theme_path) = current_theme_path() else {
+        return;
+    };
+
+    match load_theme_from_path(&theme_path) {
+        Ok(theme) => {
+            debug!(
+                "Loaded external syntax theme from {}",
+                theme_path.display()
+            );
+            theme_set.themes.insert(CURRENT_THEME.to_string(), theme);
+        }
+        Err(err) => {
+            warn!(
+                "Failed to load external syntax theme from {}: {}",
+                theme_path.display(),
+                err
+            );
+        }
+    }
+}
+
 fn load_embedded_theme(name: &str) -> std::io::Result<Theme> {
     let theme_bytes: &[u8] = match name {
         "ayu-light" => include_bytes!("../../assets/syntax-themes/ayu-light.tmTheme"),
@@ -428,8 +461,27 @@ fn load_embedded_theme(name: &str) -> std::io::Result<Theme> {
 
     let cursor = Cursor::new(theme_bytes);
     let mut buf_reader = BufReader::new(cursor);
-    ThemeSet::load_from_reader(&mut buf_reader).map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to load theme")
+    load_theme_from_reader(&mut buf_reader)
+}
+
+fn current_theme_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".config/syntect/current.tmTheme"))
+}
+
+fn load_theme_from_path(path: &Path) -> std::io::Result<Theme> {
+    let file = File::open(path)?;
+    let mut buf_reader = BufReader::new(file);
+    load_theme_from_reader(&mut buf_reader)
+}
+
+fn load_theme_from_reader<R: std::io::BufRead + std::io::Seek>(
+    reader: &mut R,
+) -> std::io::Result<Theme> {
+    ThemeSet::load_from_reader(reader).map_err(|err| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to load theme: {err}"),
+        )
     })
 }
 
@@ -522,6 +574,7 @@ pub fn get_available_themes() -> Vec<(String, String)> {
 fn prettify_theme_name(name: &str) -> String {
     // Special case mappings for better display names
     match name {
+        CURRENT_THEME => "Current tmTheme".to_string(),
         "1337" => "1337 (Leet)".to_string(),
         "ansi" => "ANSI".to_string(),
         "base16" => "Base16".to_string(),
