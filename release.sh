@@ -10,7 +10,7 @@ APP_NAME="ferrite"
 ARCH="$(uname -m)"
 PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')"
 TARBALL="${APP_NAME}-${TAG}-${PLATFORM}-${ARCH}.tar.xz"
-GH_REPO="${GH_REPO:-}"
+GH_REPO="${GH_REPO:-jaycee1285/Ferrite}"
 
 echo "==> Building ${APP_NAME} ${TAG} (${PLATFORM}/${ARCH})"
 
@@ -67,8 +67,6 @@ elif [[ -n "$GH_REPO" ]]; then
       --notes "${APP_NAME} ${TAG}" \
       --latest
   fi
-else
-  echo "==> GH_REPO not set, skipping upload"
 fi
 
 echo "==> Done"

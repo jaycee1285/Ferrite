@@ -93,6 +93,8 @@ temp/
 
 # Local workspace state (should not be committed)
 **/.ferrite/
+result/
+ferrite-v*-linux-*.tar.xz
 
 # Build script artifacts
 *.d

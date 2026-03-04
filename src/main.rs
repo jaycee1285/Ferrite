@@ -29,11 +29,41 @@ mod workspaces;
 
 use app::FerriteApp;
 use clap::Parser;
-use config::{ load_config, LogLevel };
-use log::info;
 use crate::rust_i18n::set_locale;
+use config::{ load_config, LogLevel };
+use log::{ info, warn };
 use std::path::PathBuf;
 use ui::get_app_icon;
+
+#[cfg(target_os = "linux")]
+fn configure_linux_display_backend() {
+    use std::env;
+
+    if env::var_os("DISPLAY").is_none() {
+        return;
+    }
+
+    // winit 0.29 selects Wayland/X11 from WAYLAND_DISPLAY and DISPLAY. If the runtime
+    // Wayland client library is missing but X11 is available, clear the Wayland env
+    // before the event loop is created so startup falls back to X11.
+    let wayland_available = unsafe {
+        libloading::Library::new("libwayland-client.so.0").is_ok()
+            || libloading::Library::new("libwayland-client.so").is_ok()
+    };
+
+    if !wayland_available
+        && (env::var_os("WAYLAND_DISPLAY").is_some() || env::var_os("WAYLAND_SOCKET").is_some())
+    {
+        env::remove_var("WAYLAND_DISPLAY");
+        env::remove_var("WAYLAND_SOCKET");
+        warn!(
+            "Wayland runtime library not found; clearing WAYLAND_DISPLAY/WAYLAND_SOCKET to fall back to X11"
+        );
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configure_linux_display_backend() {}
 
 /// Get current process memory usage in MB (for diagnostics).
 /// Returns (working_set_mb, private_bytes_mb) on Windows.
@@ -186,6 +216,7 @@ fn main() -> eframe::Result<()> {
     } else {
         "config"
     });
+    configure_linux_display_backend();
 
     if !initial_paths.is_empty() {
         info!("CLI paths provided: {:?}", initial_paths);

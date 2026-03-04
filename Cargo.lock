@@ -1647,6 +1647,7 @@ dependencies = [
  "env_logger",
  "fuzzy-matcher",
  "image",
+ "libloading 0.8.9",
  "log",
  "notify",
  "open",

@@ -416,12 +416,8 @@ fn inject_embedded_theme(theme_set: &mut ThemeSet, name: &str) {
 
 fn load_embedded_theme(name: &str) -> std::io::Result<Theme> {
     let theme_bytes: &[u8] = match name {
-        "ayu-light" => include_bytes!(
-            "/home/john/repos/r3bl-open-core/tui/src/tui/syntax_highlighting/assets/ayu-light.tmTheme"
-        ),
-        "ayu-mirage" => include_bytes!(
-            "/home/john/repos/r3bl-open-core/tui/src/tui/syntax_highlighting/assets/ayu-mirage.tmTheme"
-        ),
+        "ayu-light" => include_bytes!("../../assets/syntax-themes/ayu-light.tmTheme"),
+        "ayu-mirage" => include_bytes!("../../assets/syntax-themes/ayu-mirage.tmTheme"),
         other => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,

@@ -108,6 +108,8 @@ nix build .#ferrite
 ./result/bin/ferrite
 ```
 
+On Linux, Ferrite's X11 fallback follows `winit 0.29` backend selection rules. If Wayland runtime libraries are unavailable, Ferrite clears `WAYLAND_DISPLAY` and `WAYLAND_SOCKET` before creating the event loop so `winit` falls back to X11. `WINIT_UNIX_BACKEND` is not used for this fallback path.
+
 ### Declarative usage on NixOS/Home Manager
 
 ```nix
