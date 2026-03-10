@@ -1135,10 +1135,10 @@ pub enum Theme {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum EditorFont {
-    /// B612 - Default UI font for this fork
+    /// Spline Sans - Default UI font for this fork
     #[default]
     Inter,
-    /// B612 Mono - Monospace font for code-heavy documents
+    /// Spline Sans Mono - Monospace font for code-heavy documents
     JetBrainsMono,
     /// Custom system font selected by user
     #[serde(rename = "custom")]
@@ -1149,9 +1149,9 @@ impl EditorFont {
     /// Get the display name for the font.
     pub fn display_name(&self) -> String {
         match self {
-            EditorFont::Inter => "B612".to_string(),
-            EditorFont::JetBrainsMono => "B612 Mono".to_string(),
-            EditorFont::Custom(_) => "B612".to_string(),
+            EditorFont::Inter => "Spline Sans".to_string(),
+            EditorFont::JetBrainsMono => "Spline Sans Mono".to_string(),
+            EditorFont::Custom(_) => "Spline Sans".to_string(),
         }
     }
 

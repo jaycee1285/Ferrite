@@ -74,6 +74,15 @@
 
             doCheck = false;
 
+            postInstall = lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+              install -Dm644 assets/linux/io.github.olaproeis.Ferrite.desktop \
+                $out/share/applications/ferrite.desktop
+              for size in 16 32 48 64 128 256 512; do
+                install -Dm644 assets/icons/linux/''${size}x''${size}/ferrite.png \
+                  $out/share/icons/hicolor/''${size}x''${size}/apps/ferrite.png
+              done
+            '';
+
             meta = with lib; {
               description = "A fast, lightweight text editor for Markdown, JSON, and more";
               homepage = "https://github.com/OlaProeis/Ferrite";

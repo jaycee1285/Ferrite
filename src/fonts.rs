@@ -5,7 +5,7 @@
 //!
 //! ## Font Selection Features
 //!
-//! - Built-in fonts: B612 (proportional) and B612 Mono (monospace)
+//! - Built-in fonts: Spline Sans (proportional) and Spline Sans Mono (monospace)
 //! - CJK regional font preferences for correct glyph variants
 //! - Runtime font reloading without restart
 
@@ -21,19 +21,18 @@ use std::collections::BTreeMap;
 // Font Data - Embedded at compile time
 // ─────────────────────────────────────────────────────────────────────────────
 
-// B612 font family (UI/proportional)
-// The repo currently ships only regular-weight files, so bold/italic variants
-// reuse the same embedded font for now.
-const INTER_REGULAR: &[u8] = include_bytes!("../b612.ttf");
-const INTER_BOLD: &[u8] = include_bytes!("../b612.ttf");
-const INTER_ITALIC: &[u8] = include_bytes!("../b612.ttf");
-const INTER_BOLD_ITALIC: &[u8] = include_bytes!("../b612.ttf");
+// Spline Sans font family (UI/proportional)
+// No italic variant available; italic slots reuse regular/bold.
+const INTER_REGULAR: &[u8] = include_bytes!("../spline-sans.ttf");
+const INTER_BOLD: &[u8] = include_bytes!("../spline-sans-bold.ttf");
+const INTER_ITALIC: &[u8] = include_bytes!("../spline-sans.ttf");
+const INTER_BOLD_ITALIC: &[u8] = include_bytes!("../spline-sans-bold.ttf");
 
-// B612 Mono font family (code/monospace)
-const JETBRAINS_REGULAR: &[u8] = include_bytes!("../b612-mono.ttf");
-const JETBRAINS_BOLD: &[u8] = include_bytes!("../b612-mono.ttf");
-const JETBRAINS_ITALIC: &[u8] = include_bytes!("../b612-mono.ttf");
-const JETBRAINS_BOLD_ITALIC: &[u8] = include_bytes!("../b612-mono.ttf");
+// Spline Sans Mono font family (code/monospace)
+const JETBRAINS_REGULAR: &[u8] = include_bytes!("../spline-sans-mono.ttf");
+const JETBRAINS_BOLD: &[u8] = include_bytes!("../spline-sans-mono-bold.ttf");
+const JETBRAINS_ITALIC: &[u8] = include_bytes!("../spline-sans-mono-italic.ttf");
+const JETBRAINS_BOLD_ITALIC: &[u8] = include_bytes!("../spline-sans-mono-bold-italic.ttf");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-Language CJK Font Loading State
@@ -717,23 +716,23 @@ fn load_system_font(_families: &[&str]) -> Option<FontData> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-/// Custom font family for B612 (proportional UI font)
-pub const FONT_INTER: &str = "B612";
-/// Custom font family for B612 Bold
-pub const FONT_INTER_BOLD: &str = "B612-Bold";
-/// Custom font family for B612 Italic
-pub const FONT_INTER_ITALIC: &str = "B612-Italic";
-/// Custom font family for B612 Bold Italic
-pub const FONT_INTER_BOLD_ITALIC: &str = "B612-BoldItalic";
+/// Custom font family for Spline Sans (proportional UI font)
+pub const FONT_INTER: &str = "SplineSans";
+/// Custom font family for Spline Sans Bold
+pub const FONT_INTER_BOLD: &str = "SplineSans-Bold";
+/// Custom font family for Spline Sans Italic
+pub const FONT_INTER_ITALIC: &str = "SplineSans-Italic";
+/// Custom font family for Spline Sans Bold Italic
+pub const FONT_INTER_BOLD_ITALIC: &str = "SplineSans-BoldItalic";
 
-/// Custom font family for B612 Mono (monospace/code font)
-pub const FONT_JETBRAINS: &str = "B612Mono";
-/// Custom font family for B612 Mono Bold
-pub const FONT_JETBRAINS_BOLD: &str = "B612Mono-Bold";
-/// Custom font family for B612 Mono Italic
-pub const FONT_JETBRAINS_ITALIC: &str = "B612Mono-Italic";
-/// Custom font family for B612 Mono Bold Italic
-pub const FONT_JETBRAINS_BOLD_ITALIC: &str = "B612Mono-BoldItalic";
+/// Custom font family for Spline Sans Mono (monospace/code font)
+pub const FONT_JETBRAINS: &str = "SplineSansMono";
+/// Custom font family for Spline Sans Mono Bold
+pub const FONT_JETBRAINS_BOLD: &str = "SplineSansMono-Bold";
+/// Custom font family for Spline Sans Mono Italic
+pub const FONT_JETBRAINS_ITALIC: &str = "SplineSansMono-Italic";
+/// Custom font family for Spline Sans Mono Bold Italic
+pub const FONT_JETBRAINS_BOLD_ITALIC: &str = "SplineSansMono-BoldItalic";
 
 /// Keys for dynamically loaded CJK system fonts
 const FONT_CJK_KR: &str = "CJK_KR";
@@ -1684,7 +1683,7 @@ pub fn create_font_definitions_with_settings(
     );
 
     info!(
-        "Loaded fonts: B612, B612 Mono, CJK={} (preference: {:?}), custom fonts disabled",
+        "Loaded fonts: Spline Sans, Spline Sans Mono, CJK={} (preference: {:?}), custom fonts disabled",
         if load_cjk { "loaded" } else { "deferred" },
         cjk_preference
     );
